@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../core/constants.dart';
-import '../../core/utils.dart';
+import 'package:planner/core/constants.dart';
+import 'package:planner/core/utils.dart';
 
 /// Shows the current date with prev/next navigation arrows.
 ///

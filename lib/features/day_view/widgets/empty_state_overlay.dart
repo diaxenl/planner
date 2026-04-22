@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../core/theme.dart';
+import 'package:planner/core/theme.dart';
 
 /// Centered message shown when no tasks exist for the day.
 ///
