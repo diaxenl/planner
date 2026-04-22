@@ -1,30 +1,34 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:planner/main.dart';
+import 'package:planner/app.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('DayScreen smoke test — shows date and empty state',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(const HyperDayApp());
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    // Day header should show today's date.
+    // We check for the month abbreviation as a stable substring.
+    final now = DateTime.now();
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    final monthAbbrev = months[now.month - 1];
+    expect(find.textContaining(monthAbbrev), findsOneWidget);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    // Empty state message should be visible.
+    expect(
+      find.text('No tasks yet — tap + to get started'),
+      findsOneWidget,
+    );
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    // FAB should be present.
+    expect(find.byType(FloatingActionButton), findsOneWidget);
+
+    // Navigation arrows should be present.
+    expect(find.byIcon(Icons.chevron_left), findsOneWidget);
+    expect(find.byIcon(Icons.chevron_right), findsOneWidget);
   });
 }
