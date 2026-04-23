@@ -2,11 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:planner/app.dart';
+import 'package:planner/state/day_planner_model.dart';
+import 'package:planner/state/day_planner_provider.dart';
 
 void main() {
   testWidgets('DayScreen smoke test — shows date and empty state',
       (WidgetTester tester) async {
-    await tester.pumpWidget(const HyperDayApp());
+    final model = DayPlannerModel();
+
+    await tester.pumpWidget(
+      DayPlannerProvider(
+        model: model,
+        child: const HyperDayApp(),
+      ),
+    );
 
     // Day header should show today's date.
     // We check for the month abbreviation as a stable substring.

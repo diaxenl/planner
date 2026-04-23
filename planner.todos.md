@@ -26,24 +26,24 @@ This file tracks implementation progress across all phases. Subsequent agents sh
 - [x] Add FAB placeholder (`+` icon, non-functional)
 
 ## Phase 2 — Task Data Model & State
-- [ ] Define `TaskType` and `Priority` enums
-- [ ] Implement immutable `Task` class with `final` fields and `copyWith`
-- [ ] Implement ID generation (16-char hex via `Random.secure()`)
-- [ ] Define `ScheduledTask` wrapper class
-- [ ] Implement `DayPlannerModel extends ChangeNotifier` with CRUD methods
-- [ ] Add overlap validation in `addTask` / `updateTask` for hard/pinned tasks
-- [ ] Wire `InheritedNotifier<DayPlannerModel>` above `MaterialApp`
+- [x] Define `TaskType` and `Priority` enums
+- [x] Implement immutable `Task` class with `final` fields and `copyWith`
+- [x] Implement ID generation (16-char hex via `Random.secure()`)
+- [x] Define `ScheduledTask` wrapper class
+- [x] Implement `DayPlannerModel extends ChangeNotifier` with CRUD methods
+- [x] Add overlap validation in `addTask` / `updateTask` for hard/pinned tasks
+- [x] Wire `InheritedNotifier<DayPlannerModel>` above `MaterialApp`
 
 ## Phase 3 — Task UI: Create, Edit & Remove
-- [ ] Build add/edit task bottom sheet (title, duration, type toggle, time picker, priority)
-- [ ] Add input validation (title 1–100 chars, duration 5–480 min, start time in window, overlap check)
-- [ ] Connect FAB to open add-task bottom sheet
-- [ ] Build task card widget (title, time range, duration, priority badge, type icon)
-- [ ] Add hard task visual treatment (lock icon, tint)
-- [ ] Add tap-to-edit on task cards
-- [ ] Add swipe-to-delete with undo SnackBar
-- [ ] Render hard/pinned tasks at fixed positions on timeline
-- [ ] Render floating tasks in "Unscheduled" section below timeline
+- [x] Build add/edit task bottom sheet (title, duration, type toggle, time picker, priority)
+- [x] Add input validation (title 1–100 chars, duration 5–480 min, start time in window, overlap check)
+- [x] Connect FAB to open add-task bottom sheet
+- [x] Build task card widget (title, time range, duration, priority badge, type icon)
+- [x] Add hard task visual treatment (lock icon, tint)
+- [x] Add tap-to-edit on task cards
+- [x] Add swipe-to-delete with undo SnackBar
+- [x] Render hard/pinned tasks at fixed positions on timeline
+- [x] Render floating tasks in "Unscheduled" section below timeline
 
 ## Phase 4 — Scheduling Engine
 - [ ] Implement `schedule()` pure function (greedy slot-fill algorithm)
@@ -87,4 +87,4 @@ This file tracks implementation progress across all phases. Subsequent agents sh
 
 ---
 
-**Current status:** Phase 1 complete — begin with Phase 2.
+**Current status:** Phase 3 complete — begin with Phase 4.
