@@ -19,6 +19,7 @@ class TimelineView extends StatelessWidget {
     required this.schedule,
     required this.hasAnyTasks,
     required this.onTaskTap,
+    required this.onTaskComplete,
     required this.onTaskDismissed,
   });
 
@@ -30,6 +31,9 @@ class TimelineView extends StatelessWidget {
 
   /// Called when a task card is tapped (to edit).
   final void Function(Task task) onTaskTap;
+
+  /// Called when a task's complete button is tapped.
+  final void Function(Task task) onTaskComplete;
 
   /// Called when a task card is swiped to dismiss (to delete).
   final void Function(Task task) onTaskDismissed;
@@ -78,6 +82,9 @@ class TimelineView extends StatelessWidget {
         task: scheduled.task,
         timeLabel: timeLabel,
         onTap: () => onTaskTap(scheduled.task),
+        onComplete: scheduled.task.isComplete
+            ? null
+            : () => onTaskComplete(scheduled.task),
         onDismissed: () => onTaskDismissed(scheduled.task),
       ),
     );

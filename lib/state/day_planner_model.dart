@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../core/constants.dart';
 import '../models/day_schedule.dart';
+import '../models/schedule_suggestion.dart';
+import '../models/scheduled_task.dart';
 import '../models/task.dart';
 import '../services/scheduler.dart';
 
@@ -36,6 +38,12 @@ class DayPlannerModel extends ChangeNotifier {
 
   /// The current computed schedule for the viewed day.
   DaySchedule get schedule => _schedule;
+
+  ScheduleSuggestion? _suggestion;
+
+  /// A pending reschedule suggestion, if any.
+  /// Non-null after a task is completed and floating tasks can shift.
+  ScheduleSuggestion? get suggestion => _suggestion;
 
   // ── CRUD ────────────────────────────────────────────────────────────
 
@@ -83,14 +91,44 @@ class DayPlannerModel extends ChangeNotifier {
   }
 
   /// Marks the task with [id] as complete at the given [completedAt] time.
+  ///
+  /// After marking complete, computes a proposed reschedule and generates
+  /// a [ScheduleSuggestion] if any floating tasks would shift.
   void markComplete(String id, DateTime completedAt) {
     final index = _tasks.indexWhere((t) => t.id == id);
     if (index == -1) return;
+
+    // Snapshot the current committed schedule before the change.
+    final oldCommitted = _schedule.committed;
+
     _tasks[index] = _tasks[index].copyWith(
       isComplete: true,
       completedAt: () => completedAt,
     );
     _reschedule();
+
+    // Generate suggestion by diffing old vs new schedules.
+    _suggestion = _buildSuggestion(oldCommitted, _schedule);
+    if (!_suggestion!.hasChanges) {
+      _suggestion = null;
+    }
+
+    notifyListeners();
+  }
+
+  /// Accepts the current suggestion, committing the proposed schedule.
+  void acceptSuggestion() {
+    if (_suggestion == null) return;
+    // The proposed schedule is already _schedule (reschedule ran on
+    // markComplete). We just clear the suggestion.
+    _suggestion = null;
+    notifyListeners();
+  }
+
+  /// Dismisses the current suggestion without applying it.
+  void dismissSuggestion() {
+    if (_suggestion == null) return;
+    _suggestion = null;
     notifyListeners();
   }
 
@@ -113,6 +151,45 @@ class DayPlannerModel extends ChangeNotifier {
         oldTask.durationMinutes != newTask.durationMinutes ||
         oldTask.priority != newTask.priority ||
         oldTask.isComplete != newTask.isComplete;
+  }
+
+  // ── Suggestion diff ─────────────────────────────────────────────────
+
+  /// Compares the old committed list against the new [proposed] schedule.
+  ///
+  /// Produces a [ScheduleSuggestion] containing moves for any incomplete
+  /// non-hard task whose computed start time changed.
+  static ScheduleSuggestion _buildSuggestion(
+    List<ScheduledTask> oldCommitted,
+    DaySchedule proposed,
+  ) {
+    // Build a lookup: taskId → old start minutes.
+    final oldStarts = <String, TimeOfDay>{};
+    for (final st in oldCommitted) {
+      oldStarts[st.task.id] = st.computedStartTime;
+    }
+
+    final moves = <TaskMove>[];
+    for (final st in proposed.committed) {
+      // Hard tasks are never moved.
+      if (st.task.type == TaskType.hard) continue;
+      // Only report moves for incomplete tasks.
+      if (st.task.isComplete) continue;
+
+      final oldStart = oldStarts[st.task.id];
+      if (oldStart == null) continue; // newly scheduled, not a move
+
+      if (oldStart.hour != st.computedStartTime.hour ||
+          oldStart.minute != st.computedStartTime.minute) {
+        moves.add(TaskMove(
+          task: st.task,
+          oldStart: oldStart,
+          newStart: st.computedStartTime,
+        ));
+      }
+    }
+
+    return ScheduleSuggestion(proposed: proposed, moves: moves);
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────

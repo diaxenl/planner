@@ -14,6 +14,7 @@ class UnscheduledSection extends StatelessWidget {
     super.key,
     required this.tasks,
     required this.onTap,
+    required this.onComplete,
     required this.onDismissed,
   });
 
@@ -22,6 +23,9 @@ class UnscheduledSection extends StatelessWidget {
 
   /// Called when a task card is tapped (edit).
   final void Function(Task task) onTap;
+
+  /// Called when a task's complete button is tapped.
+  final void Function(Task task) onComplete;
 
   /// Called when a task card is swiped to dismiss (delete).
   final void Function(Task task) onDismissed;
@@ -67,6 +71,7 @@ class UnscheduledSection extends StatelessWidget {
             child: TaskCard(
               task: task,
               onTap: () => onTap(task),
+              onComplete: task.isComplete ? null : () => onComplete(task),
               onDismissed: () => onDismissed(task),
             ),
           ),

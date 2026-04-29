@@ -10,6 +10,7 @@ import '../../../models/task.dart';
 /// indicator icon. Hard tasks get a distinct visual treatment.
 ///
 /// - Tap → [onTap] (opens edit sheet)
+/// - Check icon → [onComplete] (mark complete)
 /// - Swipe to dismiss → [onDismissed] (delete with undo)
 class TaskCard extends StatelessWidget {
   const TaskCard({
@@ -17,6 +18,7 @@ class TaskCard extends StatelessWidget {
     required this.task,
     this.timeLabel,
     this.onTap,
+    this.onComplete,
     this.onDismissed,
   });
 
@@ -29,6 +31,9 @@ class TaskCard extends StatelessWidget {
 
   /// Called when the card is tapped (edit).
   final VoidCallback? onTap;
+
+  /// Called when the check icon is tapped (mark complete).
+  final VoidCallback? onComplete;
 
   /// Called when the card is swiped away (delete).
   final VoidCallback? onDismissed;
@@ -86,6 +91,35 @@ class TaskCard extends StatelessWidget {
 
               // Priority badge
               _priorityBadge(context),
+
+              // Complete button — shown for incomplete tasks
+              if (!task.isComplete && onComplete != null) ...[
+                const SizedBox(width: AppConstants.paddingSmall),
+                SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
+                    iconSize: 20,
+                    icon: Icon(
+                      Icons.check_circle_outline,
+                      color: Colors.green.shade600,
+                    ),
+                    tooltip: 'Mark complete',
+                    onPressed: onComplete,
+                  ),
+                ),
+              ],
+
+              // Completed indicator — shown for completed tasks
+              if (task.isComplete) ...[
+                const SizedBox(width: AppConstants.paddingSmall),
+                Icon(
+                  Icons.check_circle,
+                  size: 20,
+                  color: Colors.green.shade400,
+                ),
+              ],
             ],
           ),
         ),

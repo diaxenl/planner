@@ -57,14 +57,14 @@ This file tracks implementation progress across all phases. Subsequent agents sh
 - [x] Show overflow tasks at bottom with warning badge
 
 ## Phase 5 — Complete & Smart Suggest
-- [ ] Add complete button (check icon) to task cards
-- [ ] Implement `markComplete` — freeze completed task as fixed block
-- [ ] Run scheduler on remaining incomplete floating tasks after completion
-- [ ] Generate `ScheduleSuggestion` diff (task, oldStart, newStart)
-- [ ] Build `SuggestionBanner` UI below day header (summary + Accept/Dismiss)
-- [ ] Wire Accept → commit proposed schedule
-- [ ] Wire Dismiss → discard proposal
-- [ ] Handle pinned task suggestions with "(pinned)" label
+- [x] Add complete button (check icon) to task cards
+- [x] Implement `markComplete` — freeze completed task as fixed block
+- [x] Run scheduler on remaining incomplete floating tasks after completion
+- [x] Generate `ScheduleSuggestion` diff (task, oldStart, newStart)
+- [x] Build `SuggestionBanner` UI below day header (summary + Accept/Dismiss)
+- [x] Wire Accept → commit proposed schedule
+- [x] Wire Dismiss → discard proposal
+- [x] Handle pinned task suggestions with "(pinned)" label
 
 ## Phase 6 — Persistence
 - [ ] Add `path_provider` to `pubspec.yaml`
@@ -87,4 +87,4 @@ This file tracks implementation progress across all phases. Subsequent agents sh
 
 ---
 
-**Current status:** Phase 4 complete — begin with Phase 5.
+**Current status:** Phase 5 complete — begin with Phase 6.

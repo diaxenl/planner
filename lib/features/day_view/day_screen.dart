@@ -3,6 +3,7 @@ import '../../models/task.dart';
 import '../../state/day_planner_provider.dart';
 import 'timeline_view.dart';
 import 'widgets/day_header.dart';
+import 'widgets/suggestion_banner.dart';
 import 'widgets/task_bottom_sheet.dart';
 import 'widgets/unscheduled_section.dart';
 
@@ -24,11 +25,22 @@ class DayScreen extends StatelessWidget {
         child: Column(
           children: [
             DayHeader(date: model.viewedDate),
+
+            // Suggestion banner — shown when a reschedule is proposed.
+            if (model.suggestion != null)
+              SuggestionBanner(
+                suggestion: model.suggestion!,
+                onAccept: () => model.acceptSuggestion(),
+                onDismiss: () => model.dismissSuggestion(),
+              ),
+
             Expanded(
               child: TimelineView(
                 schedule: schedule,
                 hasAnyTasks: model.tasks.isNotEmpty,
                 onTaskTap: (task) => _editTask(context, model, task),
+                onTaskComplete: (task) =>
+                    _completeTask(context, model, task),
                 onTaskDismissed: (task) =>
                     _deleteTask(context, model, task),
               ),
@@ -36,6 +48,8 @@ class DayScreen extends StatelessWidget {
             UnscheduledSection(
               tasks: schedule.overflow,
               onTap: (task) => _editTask(context, model, task),
+              onComplete: (task) =>
+                  _completeTask(context, model, task),
               onDismissed: (task) => _deleteTask(context, model, task),
             ),
           ],
@@ -103,5 +117,9 @@ class DayScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  void _completeTask(BuildContext context, dynamic model, Task task) {
+    model.markComplete(task.id, DateTime.now());
   }
 }
