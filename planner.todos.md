@@ -46,15 +46,15 @@ This file tracks implementation progress across all phases. Subsequent agents sh
 - [x] Render floating tasks in "Unscheduled" section below timeline
 
 ## Phase 4 — Scheduling Engine
-- [ ] Implement `schedule()` pure function (greedy slot-fill algorithm)
-- [ ] Handle fixed block extraction (hard + pinned + completed tasks)
-- [ ] Compute free gaps within day window
-- [ ] Sort floating tasks by priority desc, duration asc
-- [ ] Assign floating tasks to earliest fitting gap
-- [ ] Return `DaySchedule` with `committed` and `overflow` lists
-- [ ] Integrate scheduler into `DayPlannerModel` with performance guard (skip title-only edits)
-- [ ] Move floating tasks from "Unscheduled" section onto timeline at computed positions
-- [ ] Show overflow tasks at bottom with warning badge
+- [x] Implement `schedule()` pure function (greedy slot-fill algorithm)
+- [x] Handle fixed block extraction (hard + pinned + completed tasks)
+- [x] Compute free gaps within day window
+- [x] Sort floating tasks by priority desc, duration asc
+- [x] Assign floating tasks to earliest fitting gap
+- [x] Return `DaySchedule` with `committed` and `overflow` lists
+- [x] Integrate scheduler into `DayPlannerModel` with performance guard (skip title-only edits)
+- [x] Move floating tasks from "Unscheduled" section onto timeline at computed positions
+- [x] Show overflow tasks at bottom with warning badge
 
 ## Phase 5 — Complete & Smart Suggest
 - [ ] Add complete button (check icon) to task cards
@@ -87,4 +87,4 @@ This file tracks implementation progress across all phases. Subsequent agents sh
 
 ---
 
-**Current status:** Phase 3 complete — begin with Phase 4.
+**Current status:** Phase 4 complete — begin with Phase 5.

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../core/constants.dart';
 import '../../core/theme.dart';
 import '../../core/utils.dart';
+import '../../models/day_schedule.dart';
+import '../../models/scheduled_task.dart';
 import '../../models/task.dart';
 import 'widgets/empty_state_overlay.dart';
 import 'widgets/task_card.dart';
@@ -9,20 +11,22 @@ import 'widgets/task_card.dart';
 /// Scrollable timeline covering [AppConstants.dayStartHour] to
 /// [AppConstants.dayEndHour].
 ///
-/// Uses a [Stack] for slot-based absolute positioning. Hour labels and
-/// dividers are placed at fixed pixel offsets so that future task cards
-/// can be positioned using the same time → pixel mapping via
-/// [AppUtils.timeToOffset].
+/// Uses a [Stack] for slot-based absolute positioning. All committed
+/// tasks from the [DaySchedule] are rendered at their computed positions.
 class TimelineView extends StatelessWidget {
   const TimelineView({
     super.key,
-    required this.tasks,
+    required this.schedule,
+    required this.hasAnyTasks,
     required this.onTaskTap,
     required this.onTaskDismissed,
   });
 
-  /// All tasks for the viewed day (the view filters for hard/pinned).
-  final List<Task> tasks;
+  /// The computed schedule with committed + overflow tasks.
+  final DaySchedule schedule;
+
+  /// Whether any tasks exist at all (to control empty state).
+  final bool hasAnyTasks;
 
   /// Called when a task card is tapped (to edit).
   final void Function(Task task) onTaskTap;
@@ -32,13 +36,6 @@ class TimelineView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Tasks that have a fixed position on the timeline.
-    final placedTasks = tasks
-        .where((t) => t.type != TaskType.floating && t.startTime != null)
-        .toList();
-
-    final hasAnyTasks = tasks.isNotEmpty;
-
     return SingleChildScrollView(
       padding: const EdgeInsets.only(bottom: AppConstants.paddingXLarge),
       child: SizedBox(
@@ -51,8 +48,9 @@ class TimelineView extends StatelessWidget {
                 h++)
               _buildHourRow(context, h),
 
-            // Placed task cards (hard / pinned)
-            for (final task in placedTasks) _buildPlacedCard(task),
+            // All committed task cards (hard, pinned, and scheduled floating)
+            for (final scheduled in schedule.committed)
+              _buildPlacedCard(scheduled),
 
             // Empty state overlay — only when zero tasks exist.
             if (!hasAnyTasks) const EmptyStateOverlay(),
@@ -62,13 +60,14 @@ class TimelineView extends StatelessWidget {
     );
   }
 
-  /// Renders a hard or pinned task card at its fixed timeline position.
-  Widget _buildPlacedCard(Task task) {
-    final start = task.startTime!;
+  /// Renders a committed task card at its computed timeline position.
+  Widget _buildPlacedCard(ScheduledTask scheduled) {
+    final start = scheduled.computedStartTime;
     final top = AppUtils.timeToOffset(start.hour, start.minute);
     final height =
-        (task.durationMinutes / 60.0) * AppConstants.hourHeight;
-    final timeLabel = _formatTimeRange(start, task.durationMinutes);
+        (scheduled.task.durationMinutes / 60.0) * AppConstants.hourHeight;
+    final timeLabel =
+        _formatTimeRange(start, scheduled.task.durationMinutes);
 
     return Positioned(
       top: top,
@@ -76,10 +75,10 @@ class TimelineView extends StatelessWidget {
       right: AppConstants.paddingMedium,
       height: height.clamp(36.0, double.infinity),
       child: TaskCard(
-        task: task,
+        task: scheduled.task,
         timeLabel: timeLabel,
-        onTap: () => onTaskTap(task),
-        onDismissed: () => onTaskDismissed(task),
+        onTap: () => onTaskTap(scheduled.task),
+        onDismissed: () => onTaskDismissed(scheduled.task),
       ),
     );
   }

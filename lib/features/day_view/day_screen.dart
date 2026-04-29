@@ -17,11 +17,7 @@ class DayScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final model = DayPlannerProvider.of(context);
-    final tasks = model.tasks;
-
-    // Split tasks into placed (hard/pinned) and floating.
-    final floatingTasks =
-        tasks.where((t) => t.type == TaskType.floating).toList();
+    final schedule = model.schedule;
 
     return Scaffold(
       body: SafeArea(
@@ -30,14 +26,15 @@ class DayScreen extends StatelessWidget {
             DayHeader(date: model.viewedDate),
             Expanded(
               child: TimelineView(
-                tasks: tasks,
+                schedule: schedule,
+                hasAnyTasks: model.tasks.isNotEmpty,
                 onTaskTap: (task) => _editTask(context, model, task),
                 onTaskDismissed: (task) =>
                     _deleteTask(context, model, task),
               ),
             ),
             UnscheduledSection(
-              tasks: floatingTasks,
+              tasks: schedule.overflow,
               onTap: (task) => _editTask(context, model, task),
               onDismissed: (task) => _deleteTask(context, model, task),
             ),

@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
 import '../core/constants.dart';
+import '../models/day_schedule.dart';
 import '../models/task.dart';
+import '../services/scheduler.dart';
 
 /// Central state holder for the current day's tasks.
 ///
 /// Holds a [List<Task>] for the [viewedDate] and exposes CRUD methods.
 /// All mutations replace the task in the list (immutable model) and call
 /// [notifyListeners].
+///
+/// Also maintains a cached [DaySchedule] that is recomputed when
+/// schedule-affecting fields change (type, startTime, duration, priority,
+/// isComplete). Title-only edits skip the reschedule.
 ///
 /// Overlap validation: [addTask] and [updateTask] throw [ArgumentError]
 /// if a hard/pinned task's time range overlaps with an existing hard task.
@@ -26,6 +32,11 @@ class DayPlannerModel extends ChangeNotifier {
   /// Unmodifiable view of the current day's tasks.
   List<Task> get tasks => List.unmodifiable(_tasks);
 
+  DaySchedule _schedule = DaySchedule.empty;
+
+  /// The current computed schedule for the viewed day.
+  DaySchedule get schedule => _schedule;
+
   // ── CRUD ────────────────────────────────────────────────────────────
 
   /// Adds a task to the current day.
@@ -35,6 +46,7 @@ class DayPlannerModel extends ChangeNotifier {
   void addTask(Task task) {
     _validateOverlap(task);
     _tasks.add(task);
+    _reschedule();
     notifyListeners();
   }
 
@@ -45,6 +57,7 @@ class DayPlannerModel extends ChangeNotifier {
     final index = _tasks.indexWhere((t) => t.id == id);
     if (index == -1) return false;
     _tasks.removeAt(index);
+    _reschedule();
     notifyListeners();
     return true;
   }
@@ -57,7 +70,15 @@ class DayPlannerModel extends ChangeNotifier {
     final index = _tasks.indexWhere((t) => t.id == id);
     if (index == -1) return;
     _validateOverlap(updated, excludeId: id);
+
+    final old = _tasks[index];
     _tasks[index] = updated;
+
+    // Only reschedule if schedule-affecting fields changed.
+    if (_scheduleFieldsChanged(old, updated)) {
+      _reschedule();
+    }
+
     notifyListeners();
   }
 
@@ -69,7 +90,29 @@ class DayPlannerModel extends ChangeNotifier {
       isComplete: true,
       completedAt: () => completedAt,
     );
+    _reschedule();
     notifyListeners();
+  }
+
+  // ── Scheduling ──────────────────────────────────────────────────────
+
+  /// Re-runs the scheduling engine on the current task list.
+  void _reschedule() {
+    _schedule = Scheduler.schedule(
+      _tasks,
+      dayStartHour: AppConstants.dayStartHour,
+      dayEndHour: AppConstants.dayEndHour,
+    );
+  }
+
+  /// Returns `true` if any schedule-affecting field differs between
+  /// [oldTask] and [newTask]. Title-only edits return `false`.
+  static bool _scheduleFieldsChanged(Task oldTask, Task newTask) {
+    return oldTask.type != newTask.type ||
+        oldTask.startTime != newTask.startTime ||
+        oldTask.durationMinutes != newTask.durationMinutes ||
+        oldTask.priority != newTask.priority ||
+        oldTask.isComplete != newTask.isComplete;
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────
