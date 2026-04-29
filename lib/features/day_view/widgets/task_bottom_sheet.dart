@@ -51,9 +51,32 @@ class _TaskBottomSheetState extends State<TaskBottomSheet> {
   late final TextEditingController _durationController;
   late TaskType _type;
   late TimeOfDay? _startTime;
+  late TimeOfDay? _endTime;
   late Priority _priority;
 
   bool get _isEditing => widget.existingTask != null;
+  bool get _isTimedType => _type != TaskType.floating;
+
+  /// Computes duration in minutes from start and end times.
+  /// Returns `null` if either time is unset or end is not after start.
+  int? get _computedDuration {
+    if (_startTime == null || _endTime == null) return null;
+    final startMin = _startTime!.hour * 60 + _startTime!.minute;
+    final endMin = _endTime!.hour * 60 + _endTime!.minute;
+    final diff = endMin - startMin;
+    return diff > 0 ? diff : null;
+  }
+
+  String get _typeHint {
+    switch (_type) {
+      case TaskType.floating:
+        return 'We\'ll find the best time slot for you';
+      case TaskType.pinned:
+        return 'Set a time — we may suggest adjustments';
+      case TaskType.hard:
+        return 'Fixed time — won\'t be moved';
+    }
+  }
 
   @override
   void initState() {
@@ -65,6 +88,13 @@ class _TaskBottomSheetState extends State<TaskBottomSheet> {
     );
     _type = t?.type ?? TaskType.floating;
     _startTime = t?.startTime;
+    if (t != null && t.startTime != null) {
+      final endMin =
+          t.startTime!.hour * 60 + t.startTime!.minute + t.durationMinutes;
+      _endTime = TimeOfDay(hour: endMin ~/ 60, minute: endMin % 60);
+    } else {
+      _endTime = null;
+    }
     _priority = t?.priority ?? Priority.medium;
   }
 
@@ -130,38 +160,27 @@ class _TaskBottomSheetState extends State<TaskBottomSheet> {
               ),
               const SizedBox(height: AppConstants.paddingMedium),
 
-              // 2. Duration field
-              TextFormField(
-                controller: _durationController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Duration (minutes)',
-                  hintText: '5–480',
-                  border: OutlineInputBorder(),
-                ),
-                validator: _validateDuration,
-                autovalidateMode: AutovalidateMode.onUserInteraction,
+              // 2. Scheduling type
+              Text(
+                'Scheduling',
+                style: Theme.of(context).textTheme.bodyMedium,
               ),
-              const SizedBox(height: AppConstants.paddingLarge),
-
-              // 3. Task type toggle
-              Text('Type', style: Theme.of(context).textTheme.bodyMedium),
               const SizedBox(height: AppConstants.paddingSmall),
               SegmentedButton<TaskType>(
                 segments: const [
                   ButtonSegment(
                     value: TaskType.floating,
-                    label: Text('Floating'),
-                    icon: Icon(Icons.swap_vert, size: 18),
+                    label: Text('Flexible'),
+                    icon: Icon(Icons.auto_fix_high, size: 18),
                   ),
                   ButtonSegment(
                     value: TaskType.pinned,
-                    label: Text('Pinned'),
-                    icon: Icon(Icons.push_pin_outlined, size: 18),
+                    label: Text('Timed'),
+                    icon: Icon(Icons.schedule, size: 18),
                   ),
                   ButtonSegment(
                     value: TaskType.hard,
-                    label: Text('Hard'),
+                    label: Text('Locked'),
                     icon: Icon(Icons.lock_outline, size: 18),
                   ),
                 ],
@@ -169,21 +188,87 @@ class _TaskBottomSheetState extends State<TaskBottomSheet> {
                 onSelectionChanged: (selected) {
                   setState(() {
                     _type = selected.first;
-                    // Clear start time when switching to floating.
                     if (_type == TaskType.floating) {
                       _startTime = null;
+                      _endTime = null;
                     }
                   });
                 },
               ),
+              Padding(
+                padding: const EdgeInsets.only(
+                  top: AppConstants.paddingSmall,
+                  left: AppConstants.paddingSmall,
+                ),
+                child: Text(
+                  _typeHint,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.grey.shade600,
+                        fontStyle: FontStyle.italic,
+                      ),
+                ),
+              ),
               const SizedBox(height: AppConstants.paddingLarge),
 
-              // 4. Start time picker (only for pinned / hard)
-              if (_type != TaskType.floating) ...[
-                _StartTimePicker(
-                  startTime: _startTime,
-                  onChanged: (t) => setState(() => _startTime = t),
+              // 3. Duration field (flexible only)
+              if (!_isTimedType) ...[
+                TextFormField(
+                  controller: _durationController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Duration (minutes)',
+                    hintText: '5–480',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: _validateDuration,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
                 ),
+                const SizedBox(height: AppConstants.paddingLarge),
+              ],
+
+              // 4. Start / End time pickers (timed & locked only)
+              if (_isTimedType) ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: _TimePickerButton(
+                        label: 'Start',
+                        time: _startTime,
+                        onChanged: (t) => setState(() => _startTime = t),
+                      ),
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: AppConstants.paddingSmall,
+                      ),
+                      child: Icon(
+                        Icons.arrow_forward,
+                        size: 16,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    Expanded(
+                      child: _TimePickerButton(
+                        label: 'End',
+                        time: _endTime,
+                        onChanged: (t) => setState(() => _endTime = t),
+                      ),
+                    ),
+                  ],
+                ),
+                if (_computedDuration != null)
+                  Padding(
+                    padding: const EdgeInsets.only(
+                      top: AppConstants.paddingSmall,
+                      left: AppConstants.paddingSmall,
+                    ),
+                    child: Text(
+                      'Duration: $_computedDuration min',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Colors.grey.shade600,
+                          ),
+                    ),
+                  ),
                 const SizedBox(height: AppConstants.paddingLarge),
               ],
 
@@ -245,16 +330,40 @@ class _TaskBottomSheetState extends State<TaskBottomSheet> {
   void _onSubmit() {
     if (!_formKey.currentState!.validate()) return;
 
-    // Extra check: pinned/hard must have a start time selected.
-    if (_type != TaskType.floating && _startTime == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a start time')),
-      );
-      return;
-    }
-
     final title = _titleController.text.trim();
-    final duration = int.parse(_durationController.text.trim());
+    int duration;
+
+    if (_isTimedType) {
+      // Validate start / end for timed & locked tasks.
+      if (_startTime == null) {
+        _showSnack('Please select a start time');
+        return;
+      }
+      if (_endTime == null) {
+        _showSnack('Please select an end time');
+        return;
+      }
+      final computed = _computedDuration;
+      if (computed == null || computed <= 0) {
+        _showSnack('End time must be after start time');
+        return;
+      }
+      if (computed < AppConstants.durationMinMinutes) {
+        _showSnack(
+          'Minimum duration is ${AppConstants.durationMinMinutes} minutes',
+        );
+        return;
+      }
+      if (computed > AppConstants.durationMaxMinutes) {
+        _showSnack(
+          'Maximum duration is ${AppConstants.durationMaxMinutes} minutes',
+        );
+        return;
+      }
+      duration = computed;
+    } else {
+      duration = int.parse(_durationController.text.trim());
+    }
 
     final task = widget.existingTask != null
         ? widget.existingTask!.copyWith(
@@ -275,36 +384,45 @@ class _TaskBottomSheetState extends State<TaskBottomSheet> {
 
     Navigator.of(context).pop(task);
   }
+
+  void _showSnack(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Start Time Picker
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _StartTimePicker extends StatelessWidget {
-  const _StartTimePicker({required this.startTime, required this.onChanged});
+class _TimePickerButton extends StatelessWidget {
+  const _TimePickerButton({
+    required this.label,
+    required this.time,
+    required this.onChanged,
+  });
 
-  final TimeOfDay? startTime;
+  final String label;
+  final TimeOfDay? time;
   final ValueChanged<TimeOfDay?> onChanged;
 
   @override
   Widget build(BuildContext context) {
-    final label = startTime != null
-        ? startTime!.format(context)
-        : 'Select start time';
+    final display = time != null ? time!.format(context) : label;
 
     return OutlinedButton.icon(
       onPressed: () async {
         final picked = await showTimePicker(
           context: context,
-          initialTime: startTime ?? const TimeOfDay(hour: 9, minute: 0),
+          initialTime: time ?? const TimeOfDay(hour: 9, minute: 0),
         );
         if (picked != null) {
           onChanged(picked);
         }
       },
       icon: const Icon(Icons.access_time, size: 18),
-      label: Text(label),
+      label: Text(display),
     );
   }
 }
