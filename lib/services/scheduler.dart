@@ -15,14 +15,20 @@ class Scheduler {
   /// Computes a [DaySchedule] from [tasks] within [dayStartHour] to
   /// [dayEndHour].
   ///
+  /// [nowMinutes] is the current time in minutes from midnight. Floating
+  /// tasks will only be placed into gaps that start at or after this time.
+  /// If `null`, the full day window is used (useful for testing).
+  ///
   /// This is a pure function — no side effects, no state mutation.
   static DaySchedule schedule(
     List<Task> tasks, {
     required int dayStartHour,
     required int dayEndHour,
+    int? nowMinutes,
   }) {
     final dayStartMin = dayStartHour * 60;
     final dayEndMin = dayEndHour * 60;
+    final effectiveNow = nowMinutes ?? dayStartMin;
 
     // ── 1. Separate fixed and floating tasks ──────────────────────────
     final fixedTasks = <Task>[];
@@ -80,19 +86,26 @@ class Scheduler {
       var placed = false;
 
       for (final gap in gaps) {
-        final available = gap.endMin - gap.startMin;
+        // Skip gaps that end before now — floating tasks should not be
+        // placed in the past.
+        if (gap.endMin <= effectiveNow) continue;
+
+        // If the gap straddles now, clamp its usable start to now.
+        final usableStart =
+            gap.startMin < effectiveNow ? effectiveNow : gap.startMin;
+        final available = gap.endMin - usableStart;
+
         if (available >= task.durationMinutes) {
-          // Place the task at the start of this gap.
           final startTime = TimeOfDay(
-            hour: gap.startMin ~/ 60,
-            minute: gap.startMin % 60,
+            hour: usableStart ~/ 60,
+            minute: usableStart % 60,
           );
           committed.add(
             ScheduledTask(task: task, computedStartTime: startTime),
           );
 
-          // Shrink the gap.
-          gap.startMin += task.durationMinutes;
+          // Shrink the gap from the usable start.
+          gap.startMin = usableStart + task.durationMinutes;
           placed = true;
           break;
         }

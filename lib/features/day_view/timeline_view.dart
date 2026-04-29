@@ -77,10 +77,11 @@ class TimelineView extends StatelessWidget {
       top: top,
       left: AppConstants.timeGutterWidth + AppConstants.paddingSmall,
       right: AppConstants.paddingMedium,
-      height: height.clamp(36.0, double.infinity),
+      height: height.clamp(48.0, double.infinity),
       child: TaskCard(
         task: scheduled.task,
         timeLabel: timeLabel,
+        compact: height < 56,
         onTap: () => onTaskTap(scheduled.task),
         onComplete: scheduled.task.isComplete
             ? null

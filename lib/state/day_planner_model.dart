@@ -136,10 +136,12 @@ class DayPlannerModel extends ChangeNotifier {
 
   /// Re-runs the scheduling engine on the current task list.
   void _reschedule() {
+    final now = TimeOfDay.now();
     _schedule = Scheduler.schedule(
       _tasks,
       dayStartHour: AppConstants.dayStartHour,
       dayEndHour: AppConstants.dayEndHour,
+      nowMinutes: now.hour * 60 + now.minute,
     );
   }
 

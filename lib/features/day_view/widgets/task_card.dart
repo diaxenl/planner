@@ -17,6 +17,7 @@ class TaskCard extends StatelessWidget {
     super.key,
     required this.task,
     this.timeLabel,
+    this.compact = false,
     this.onTap,
     this.onComplete,
     this.onDismissed,
@@ -28,6 +29,9 @@ class TaskCard extends StatelessWidget {
   /// Optional formatted time range, e.g. "9:00 AM – 10:30 AM".
   /// Shown when the task has a computed position on the timeline.
   final String? timeLabel;
+
+  /// When `true`, uses a tighter layout that fits short timeline slots.
+  final bool compact;
 
   /// Called when the card is tapped (edit).
   final VoidCallback? onTap;
@@ -48,9 +52,11 @@ class TaskCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(
+          padding: EdgeInsets.symmetric(
             horizontal: AppConstants.paddingMedium,
-            vertical: AppConstants.paddingMedium,
+            vertical: compact
+                ? AppConstants.paddingSmall
+                : AppConstants.paddingMedium,
           ),
           child: Row(
             children: [
@@ -60,33 +66,47 @@ class TaskCard extends StatelessWidget {
 
               // Title + time label
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      task.title,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.black87,
-                        decoration: task.isComplete
-                            ? TextDecoration.lineThrough
-                            : null,
+                child: compact
+                    ? Text(
+                        task.title,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.black87,
+                          decoration: task.isComplete
+                              ? TextDecoration.lineThrough
+                              : null,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            task.title,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.black87,
+                              decoration: task.isComplete
+                                  ? TextDecoration.lineThrough
+                                  : null,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _subtitle(),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppTheme.hourLabelColor,
+                            ),
+                          ),
+                        ],
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _subtitle(),
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppTheme.hourLabelColor,
-                      ),
-                    ),
-                  ],
-                ),
               ),
 
               // Priority badge
