@@ -114,12 +114,14 @@ class _TaskBottomSheetState extends State<TaskBottomSheet> {
         left: AppConstants.paddingLarge,
         right: AppConstants.paddingLarge,
         top: AppConstants.paddingLarge,
-        bottom: MediaQuery.of(context).viewInsets.bottom +
-            AppConstants.paddingLarge,
       ),
       child: Form(
         key: _formKey,
         child: SingleChildScrollView(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom +
+                AppConstants.paddingLarge,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
