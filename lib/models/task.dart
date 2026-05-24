@@ -118,6 +118,72 @@ class Task {
     return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
   }
 
+  // ── Serialisation ──────────────────────────────────────────────────
+
+  /// Serialises this task to a JSON-compatible map.
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'durationMinutes': durationMinutes,
+      'type': type.name,
+      'startTime': startTime == null
+          ? null
+          : {'hour': startTime!.hour, 'minute': startTime!.minute},
+      'priority': priority.name,
+      'isComplete': isComplete,
+      'completedAt': completedAt?.toIso8601String(),
+      'date': date.toIso8601String(),
+      'carriedFromDate': carriedFromDate?.toIso8601String(),
+    };
+  }
+
+  /// Deserialises a [Task] from [json], which must be a map produced by
+  /// [toJson]. Returns `null` if any required field is missing or invalid.
+  static Task? fromJson(Map<String, dynamic> json) {
+    try {
+      final id = json['id'] as String;
+      final title = json['title'] as String;
+      final durationMinutes = json['durationMinutes'] as int;
+      final type = TaskType.values.firstWhere(
+        (e) => e.name == json['type'],
+      );
+      final startTimeMap = json['startTime'] as Map<String, dynamic>?;
+      final startTime = startTimeMap == null
+          ? null
+          : TimeOfDay(
+              hour: startTimeMap['hour'] as int,
+              minute: startTimeMap['minute'] as int,
+            );
+      final priority = Priority.values.firstWhere(
+        (e) => e.name == json['priority'],
+      );
+      final isComplete = json['isComplete'] as bool;
+      final completedAt = json['completedAt'] == null
+          ? null
+          : DateTime.parse(json['completedAt'] as String);
+      final date = DateTime.parse(json['date'] as String);
+      final carriedFromDate = json['carriedFromDate'] == null
+          ? null
+          : DateTime.parse(json['carriedFromDate'] as String);
+
+      return Task(
+        id: id,
+        title: title,
+        durationMinutes: durationMinutes,
+        type: type,
+        startTime: startTime,
+        priority: priority,
+        isComplete: isComplete,
+        completedAt: completedAt,
+        date: date,
+        carriedFromDate: carriedFromDate,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) || other is Task && other.id == id;

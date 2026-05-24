@@ -3,12 +3,21 @@ import 'package:planner/core/constants.dart';
 import 'package:planner/core/utils.dart';
 
 /// Shows the current date with prev/next navigation arrows.
-///
-/// The arrows are visual placeholders — they become functional in Phase 7.
 class DayHeader extends StatelessWidget {
-  const DayHeader({super.key, required this.date});
+  const DayHeader({
+    super.key,
+    required this.date,
+    this.onPreviousDay,
+    this.onNextDay,
+  });
 
   final DateTime date;
+
+  /// Called when the user taps the left (previous day) arrow.
+  final VoidCallback? onPreviousDay;
+
+  /// Called when the user taps the right (next day) arrow.
+  final VoidCallback? onNextDay;
 
   @override
   Widget build(BuildContext context) {
@@ -29,17 +38,13 @@ class DayHeader extends StatelessWidget {
         children: [
           IconButton(
             icon: const Icon(Icons.chevron_left),
-            onPressed: () {
-              // Non-functional until Phase 7.
-            },
+            onPressed: onPreviousDay,
             tooltip: 'Previous day',
           ),
           Text(formatted, style: textTheme.titleLarge),
           IconButton(
             icon: const Icon(Icons.chevron_right),
-            onPressed: () {
-              // Non-functional until Phase 7.
-            },
+            onPressed: onNextDay,
             tooltip: 'Next day',
           ),
         ],

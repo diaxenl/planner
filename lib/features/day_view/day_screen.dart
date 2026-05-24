@@ -24,7 +24,15 @@ class DayScreen extends StatelessWidget {
       body: SafeArea(
         child: Column(
           children: [
-            DayHeader(date: model.viewedDate),
+            DayHeader(
+              date: model.viewedDate,
+              onPreviousDay: () => model.setViewedDate(
+                model.viewedDate.subtract(const Duration(days: 1)),
+              ),
+              onNextDay: () => model.setViewedDate(
+                model.viewedDate.add(const Duration(days: 1)),
+              ),
+            ),
 
             // Suggestion banner — shown when a reschedule is proposed.
             if (model.suggestion != null)

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/constants.dart';
 import '../../../core/theme.dart';
+import '../../../core/utils.dart';
 import '../../../models/task.dart';
 
 /// A card representing a single task on the timeline or in the
@@ -190,6 +191,11 @@ class TaskCard extends StatelessWidget {
       parts.add(timeLabel!);
     }
     parts.add('${task.durationMinutes} min');
+    if (task.carriedFromDate != null) {
+      final d = task.carriedFromDate!;
+      final month = AppUtils.monthAbbrev(d.month);
+      parts.add('Carried from $month ${d.day}');
+    }
     return parts.join(' · ');
   }
 

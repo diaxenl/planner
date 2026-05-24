@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../core/constants.dart';
 import '../models/day_schedule.dart';
 import '../models/schedule_suggestion.dart';
 import '../models/scheduled_task.dart';
 import '../models/task.dart';
+import '../services/day_repository.dart';
 import '../services/scheduler.dart';
 
 /// Central state holder for the current day's tasks.
@@ -18,9 +21,14 @@ import '../services/scheduler.dart';
 ///
 /// Overlap validation: [addTask] and [updateTask] throw [ArgumentError]
 /// if a hard/pinned task's time range overlaps with an existing hard task.
-class DayPlannerModel extends ChangeNotifier {
-  DayPlannerModel({DateTime? initialDate})
-      : _viewedDate = _dateOnly(initialDate ?? DateTime.now());
+///
+/// Persistence: when a [DayRepository] is provided, the model loads tasks
+/// from storage on [loadDate] and saves them after every mutation with a
+/// 500 ms debounce. On [AppLifecycleState.paused] the save is immediate.
+class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
+  DayPlannerModel({DateTime? initialDate, DayRepository? repository})
+      : _viewedDate = _dateOnly(initialDate ?? DateTime.now()),
+        _repository = repository;
 
   // ── State ───────────────────────────────────────────────────────────
 
@@ -45,6 +53,67 @@ class DayPlannerModel extends ChangeNotifier {
   /// Non-null after a task is completed and floating tasks can shift.
   ScheduleSuggestion? get suggestion => _suggestion;
 
+  bool _isLoading = false;
+
+  /// True while an async load is in progress.
+  bool get isLoading => _isLoading;
+
+  // ── Persistence ─────────────────────────────────────────────────────
+
+  final DayRepository? _repository;
+  Timer? _saveTimer;
+
+  /// Loads tasks for [date] from the repository (if any) and replaces
+  /// the in-memory state. Also registers this model as a lifecycle
+  /// observer on the first call.
+  Future<void> loadDate(DateTime date) async {
+    WidgetsBinding.instance.removeObserver(this);
+    WidgetsBinding.instance.addObserver(this);
+
+    _viewedDate = _dateOnly(date);
+    _tasks.clear();
+    _suggestion = null;
+    _schedule = DaySchedule.empty;
+    _isLoading = true;
+    notifyListeners();
+
+    if (_repository != null) {
+      final loaded = await _repository.load(_viewedDate);
+      _tasks.addAll(loaded);
+    }
+
+    _reschedule();
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  /// Saves the current tasks to the repository immediately.
+  Future<void> _saveNow() async {
+    if (_repository == null) return;
+    await _repository.save(_viewedDate, List.of(_tasks));
+  }
+
+  /// Cancels any pending debounced save and schedules a new one in 500 ms.
+  void _scheduleSave() {
+    _saveTimer?.cancel();
+    _saveTimer = Timer(const Duration(milliseconds: 500), _saveNow);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _saveTimer?.cancel();
+      _saveNow();
+    }
+  }
+
+  @override
+  void dispose() {
+    _saveTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
   // ── CRUD ────────────────────────────────────────────────────────────
 
   /// Adds a task to the current day.
@@ -55,6 +124,7 @@ class DayPlannerModel extends ChangeNotifier {
     _validateOverlap(task);
     _tasks.add(task);
     _reschedule();
+    _scheduleSave();
     notifyListeners();
   }
 
@@ -66,6 +136,7 @@ class DayPlannerModel extends ChangeNotifier {
     if (index == -1) return false;
     _tasks.removeAt(index);
     _reschedule();
+    _scheduleSave();
     notifyListeners();
     return true;
   }
@@ -87,6 +158,7 @@ class DayPlannerModel extends ChangeNotifier {
       _reschedule();
     }
 
+    _scheduleSave();
     notifyListeners();
   }
 
@@ -113,6 +185,7 @@ class DayPlannerModel extends ChangeNotifier {
       _suggestion = null;
     }
 
+    _scheduleSave();
     notifyListeners();
   }
 
@@ -130,6 +203,67 @@ class DayPlannerModel extends ChangeNotifier {
     if (_suggestion == null) return;
     _suggestion = null;
     notifyListeners();
+  }
+
+  // ── Multi-day navigation ─────────────────────────────────────────────
+
+  /// Saves the current day (if dirty), switches to [newDate], and loads
+  /// its tasks. Incomplete non-hard tasks from the previous day that
+  /// have not already been carried to [newDate] are added as carry-forward
+  /// tasks.
+  Future<void> setViewedDate(DateTime newDate) async {
+    // Save the current day before switching.
+    _saveTimer?.cancel();
+    await _saveNow();
+
+    final previousDate = _viewedDate;
+    final previousTasks = List<Task>.of(_tasks);
+
+    // Load the new date from the repository.
+    await loadDate(newDate);
+
+    // Carry forward: only when moving forward in time (next-day navigation).
+    // We carry incomplete, non-hard tasks that haven't been carried yet or
+    // that originated on the previous day.
+    final targetDate = _dateOnly(newDate);
+    final isForwardNavigation =
+        targetDate.isAfter(_dateOnly(previousDate));
+
+    if (isForwardNavigation) {
+      final alreadyCarriedIds = _tasks
+          .where((t) =>
+              t.carriedFromDate != null &&
+              _dateOnly(t.carriedFromDate!) == _dateOnly(previousDate))
+          .map((t) => t.id)
+          .toSet();
+
+      for (final old in previousTasks) {
+        if (old.isComplete) continue;
+        if (old.type == TaskType.hard) continue;
+        if (alreadyCarriedIds.contains(old.id)) continue;
+
+        final carried = old.copyWith(
+          // New ID so the task is treated as a new entity on the new day.
+          id: null,
+          date: targetDate,
+          carriedFromDate: () => _dateOnly(previousDate),
+          // Pinned tasks become floating when carried to preserve scheduling
+          // flexibility; the user can re-pin if desired.
+          type: old.type == TaskType.pinned ? TaskType.floating : null,
+          startTime: old.type == TaskType.pinned ? () => null : null,
+        );
+        _tasks.add(carried);
+      }
+
+      if (previousTasks.any((t) =>
+          !t.isComplete &&
+          t.type != TaskType.hard &&
+          !alreadyCarriedIds.contains(t.id))) {
+        _reschedule();
+        await _saveNow();
+        notifyListeners();
+      }
+    }
   }
 
   // ── Scheduling ──────────────────────────────────────────────────────
