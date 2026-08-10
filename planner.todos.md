@@ -67,24 +67,24 @@ This file tracks implementation progress across all phases. Subsequent agents sh
 - [x] Handle pinned task suggestions with "(pinned)" label
 
 ## Phase 6 — Persistence
-- [ ] Add `path_provider` to `pubspec.yaml`
-- [ ] Define `DayRepository` abstract interface
-- [ ] Implement `LocalDayRepository` (JSON read/write in `hyperday/` subdirectory)
-- [ ] Implement `Task.toJson()` / `Task.fromJson()`
-- [ ] Implement atomic writes (write to `.tmp`, then rename)
-- [ ] Implement debounced saves (500ms) in `DayPlannerModel`
-- [ ] Implement immediate save on `AppLifecycleState.paused`
-- [ ] Add corrupt file handling (rename to `.corrupt`, return empty list)
-- [ ] Wire `DayPlannerModel` to load from repository on init
+- [x] Add `path_provider` to `pubspec.yaml`
+- [x] Define `DayRepository` abstract interface
+- [x] Implement `LocalDayRepository` (JSON read/write in `hyperday/` subdirectory)
+- [x] Implement `Task.toJson()` / `Task.fromJson()`
+- [x] Implement atomic writes (write to `.tmp`, then rename)
+- [x] Implement debounced saves (500ms) in `DayPlannerModel`
+- [x] Implement immediate save on `AppLifecycleState.paused`
+- [x] Add corrupt file handling (rename to `.corrupt`, return empty list)
+- [x] Wire `DayPlannerModel` to load from repository on init
 
 ## Phase 7 — Multi-day & Carry-forward
-- [ ] Make prev/next day header buttons functional
-- [ ] Implement `setViewedDate` (save if dirty, then load new date)
-- [ ] Implement carry-forward: scan previous day for incomplete non-hard tasks
-- [ ] Set `carriedFromDate` on carried tasks
-- [ ] Add idempotency check (skip if already carried)
-- [ ] Display "Carried from [date]" label on carried task cards
+- [x] Make prev/next day header buttons functional
+- [x] Implement `setViewedDate` (save if dirty, then load new date)
+- [x] Implement carry-forward: scan previous day for incomplete non-hard tasks
+- [x] Set `carriedFromDate` on carried tasks
+- [x] Add idempotency check (skip if already carried)
+- [x] Display "Carried from [date]" label on carried task cards
 
 ---
 
-**Current status:** Phase 5 complete — begin with Phase 6.
+**Current status:** Phase 7 complete.
