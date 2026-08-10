@@ -17,7 +17,7 @@ import '../services/scheduler.dart';
 ///
 /// Also maintains a cached [DaySchedule] that is recomputed when
 /// schedule-affecting fields change (type, startTime, duration, priority,
-/// isComplete). Title-only edits skip the reschedule.
+/// status, startedAt). Title-only edits skip the reschedule.
 ///
 /// Overlap validation: [addTask] and [updateTask] throw [ArgumentError]
 /// if a hard/pinned task's time range overlaps with an existing hard task.
@@ -174,7 +174,7 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     final oldCommitted = _schedule.committed;
 
     _tasks[index] = _tasks[index].copyWith(
-      isComplete: true,
+      status: TaskStatus.complete,
       completedAt: () => completedAt,
     );
     _reschedule();
@@ -238,7 +238,8 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
           .toSet();
 
       for (final old in previousTasks) {
-        if (old.isComplete) continue;
+        if (old.status == TaskStatus.complete) continue;
+        if (old.status == TaskStatus.cancelled) continue;
         if (old.type == TaskType.hard) continue;
         if (alreadyCarriedIds.contains(old.id)) continue;
 
@@ -256,7 +257,8 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
       }
 
       if (previousTasks.any((t) =>
-          !t.isComplete &&
+          t.status != TaskStatus.complete &&
+          t.status != TaskStatus.cancelled &&
           t.type != TaskType.hard &&
           !alreadyCarriedIds.contains(t.id))) {
         _reschedule();
@@ -286,7 +288,8 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
         oldTask.startTime != newTask.startTime ||
         oldTask.durationMinutes != newTask.durationMinutes ||
         oldTask.priority != newTask.priority ||
-        oldTask.isComplete != newTask.isComplete;
+        oldTask.status != newTask.status ||
+        oldTask.startedAt != newTask.startedAt;
   }
 
   // ── Suggestion diff ─────────────────────────────────────────────────
@@ -309,8 +312,9 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     for (final st in proposed.committed) {
       // Hard tasks are never moved.
       if (st.task.type == TaskType.hard) continue;
-      // Only report moves for incomplete tasks.
-      if (st.task.isComplete) continue;
+      // Only report moves for tasks that are still active.
+      if (st.task.status == TaskStatus.complete) continue;
+      if (st.task.status == TaskStatus.cancelled) continue;
 
       final oldStart = oldStarts[st.task.id];
       if (oldStart == null) continue; // newly scheduled, not a move

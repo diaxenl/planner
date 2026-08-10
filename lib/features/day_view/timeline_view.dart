@@ -83,7 +83,7 @@ class TimelineView extends StatelessWidget {
         timeLabel: timeLabel,
         compact: height < 56,
         onTap: () => onTaskTap(scheduled.task),
-        onComplete: scheduled.task.isComplete
+        onComplete: scheduled.task.status == TaskStatus.complete
             ? null
             : () => onTaskComplete(scheduled.task),
         onDismissed: () => onTaskDismissed(scheduled.task),

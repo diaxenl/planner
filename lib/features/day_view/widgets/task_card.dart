@@ -74,7 +74,7 @@ class TaskCard extends StatelessWidget {
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
                           color: Colors.black87,
-                          decoration: task.isComplete
+                          decoration: task.status == TaskStatus.complete
                               ? TextDecoration.lineThrough
                               : null,
                         ),
@@ -91,7 +91,7 @@ class TaskCard extends StatelessWidget {
                               fontSize: 14,
                               fontWeight: FontWeight.w500,
                               color: Colors.black87,
-                              decoration: task.isComplete
+                              decoration: task.status == TaskStatus.complete
                                   ? TextDecoration.lineThrough
                                   : null,
                             ),
@@ -114,7 +114,7 @@ class TaskCard extends StatelessWidget {
               _priorityBadge(context),
 
               // Complete button — shown for incomplete tasks
-              if (!task.isComplete && onComplete != null) ...[
+              if (task.status != TaskStatus.complete && onComplete != null) ...[
                 const SizedBox(width: AppConstants.paddingSmall),
                 SizedBox(
                   width: 28,
@@ -133,7 +133,7 @@ class TaskCard extends StatelessWidget {
               ],
 
               // Completed indicator — shown for completed tasks
-              if (task.isComplete) ...[
+              if (task.status == TaskStatus.complete) ...[
                 const SizedBox(width: AppConstants.paddingSmall),
                 Icon(
                   Icons.check_circle,
@@ -169,7 +169,7 @@ class TaskCard extends StatelessWidget {
   // ── Helpers ────────────────────────────────────────────────────────
 
   Color _cardColor(BuildContext context) {
-    if (task.isComplete) return Colors.grey.shade100;
+    if (task.status == TaskStatus.complete) return Colors.grey.shade100;
     if (task.type == TaskType.hard) return Colors.blue.shade50;
     return Colors.white;
   }

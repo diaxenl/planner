@@ -90,13 +90,13 @@ This file tracks implementation progress across all phases. Subsequent agents sh
 ---
 
 ## Phase 8 — Data Model & State Overhaul
-- [ ] Add `TaskStatus` enum (`notStarted`, `inProgress`, `complete`, `cancelled`) to `models/task.dart`
-- [ ] Replace `Task.isComplete` (bool) with `Task.status` (`TaskStatus`); keep `completedAt`
-- [ ] Add `Task.startedAt` (`DateTime?`) and `Task.actualDurationMinutes` (`int?`)
-- [ ] Update `Task.copyWith`, `toJson`, `fromJson` for the new fields/enum
-- [ ] Update every `isComplete` read/write site across `state/`, `services/`, `features/` to use `status`
-- [ ] Update `Scheduler.schedule()`: treat `inProgress` tasks as fixed blocks (like hard tasks); `cancelled` tasks are excluded like completed ones
-- [ ] Update `_scheduleFieldsChanged` in `DayPlannerModel` to include `status`/`startedAt` transitions
+- [x] Add `TaskStatus` enum (`notStarted`, `inProgress`, `complete`, `cancelled`) to `models/task.dart`
+- [x] Replace `Task.isComplete` (bool) with `Task.status` (`TaskStatus`); keep `completedAt`
+- [x] Add `Task.startedAt` (`DateTime?`) and `Task.actualDurationMinutes` (`int?`)
+- [x] Update `Task.copyWith`, `toJson`, `fromJson` for the new fields/enum
+- [x] Update every `isComplete` read/write site across `state/`, `services/`, `features/` to use `status`
+- [x] Update `Scheduler.schedule()`: treat `inProgress` tasks as fixed blocks (like hard tasks); `cancelled` tasks are excluded like completed ones
+- [x] Update `_scheduleFieldsChanged` in `DayPlannerModel` to include `status`/`startedAt` transitions
 
 ## Phase 9 — Adaptive Replanning Everywhere
 - [ ] Add `DayPlannerModel.startTask(id)` — sets `status = inProgress`, `startedAt = now`, reschedules
@@ -138,4 +138,4 @@ This file tracks implementation progress across all phases. Subsequent agents sh
 
 ---
 
-**Current status:** Phase 7 (v1 foundation) complete. Phases 8–13 (Adaptive Focus Planner overhaul) not started — see [plan-hyperDay.prompt.md](plan-hyperDay.prompt.md) for the full product spec.
+**Current status:** Phase 8 (Data Model & State Overhaul) complete. Phases 9–13 (Adaptive Focus Planner overhaul) not started — see [plan-hyperDay.prompt.md](plan-hyperDay.prompt.md) for the full product spec.

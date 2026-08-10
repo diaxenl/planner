@@ -21,6 +21,28 @@ enum Priority {
   high,
 }
 
+/// Lifecycle status of a task.
+///
+/// Valid transitions: `notStarted` → `inProgress` → `complete`, or
+/// `notStarted`/`inProgress` → `cancelled`. See the "Input Validation
+/// Rules" section of the HyperDay PRD for which UI actions are allowed
+/// from each status.
+enum TaskStatus {
+  /// Default status — the task has not been started or acted on yet.
+  notStarted,
+
+  /// The user has tapped Start; the task is actively being worked on
+  /// and is treated as a fixed block by the scheduler.
+  inProgress,
+
+  /// The task has been finished.
+  complete,
+
+  /// The task was abandoned before completion. Frees its slot like a
+  /// completed task, but is excluded from estimate-accuracy stats.
+  cancelled,
+}
+
 /// An immutable task entity.
 ///
 /// All fields are `final`. To change a field, use [copyWith] which returns
@@ -34,8 +56,10 @@ class Task {
     required this.type,
     this.startTime,
     this.priority = Priority.medium,
-    this.isComplete = false,
+    this.status = TaskStatus.notStarted,
     this.completedAt,
+    this.startedAt,
+    this.actualDurationMinutes,
     required this.date,
     this.carriedFromDate,
   }) : id = id ?? _generateId();
@@ -59,11 +83,21 @@ class Task {
   /// Scheduling priority — higher priority floating tasks are placed first.
   final Priority priority;
 
-  /// Whether the task has been marked complete.
-  final bool isComplete;
+  /// Lifecycle status of the task. See [TaskStatus] for valid transitions.
+  final TaskStatus status;
 
   /// The moment the user marked this task complete.
   final DateTime? completedAt;
+
+  /// The moment the user tapped Start. Non-null once the task has been
+  /// [TaskStatus.inProgress] at least once. Used to anchor the task as a
+  /// fixed block while in progress and to compute [actualDurationMinutes]
+  /// on completion.
+  final DateTime? startedAt;
+
+  /// Elapsed real time in minutes, recorded when the task is completed.
+  /// `null` until the task reaches [TaskStatus.complete].
+  final int? actualDurationMinutes;
 
   /// The calendar day this task belongs to (date only, time ignored).
   final DateTime date;
@@ -80,8 +114,10 @@ class Task {
     TaskType? type,
     TimeOfDay? Function()? startTime,
     Priority? priority,
-    bool? isComplete,
+    TaskStatus? status,
     DateTime? Function()? completedAt,
+    DateTime? Function()? startedAt,
+    int? Function()? actualDurationMinutes,
     DateTime? date,
     DateTime? Function()? carriedFromDate,
   }) {
@@ -92,8 +128,12 @@ class Task {
       type: type ?? this.type,
       startTime: startTime != null ? startTime() : this.startTime,
       priority: priority ?? this.priority,
-      isComplete: isComplete ?? this.isComplete,
+      status: status ?? this.status,
       completedAt: completedAt != null ? completedAt() : this.completedAt,
+      startedAt: startedAt != null ? startedAt() : this.startedAt,
+      actualDurationMinutes: actualDurationMinutes != null
+          ? actualDurationMinutes()
+          : this.actualDurationMinutes,
       date: date ?? this.date,
       carriedFromDate:
           carriedFromDate != null ? carriedFromDate() : this.carriedFromDate,
@@ -131,8 +171,10 @@ class Task {
           ? null
           : {'hour': startTime!.hour, 'minute': startTime!.minute},
       'priority': priority.name,
-      'isComplete': isComplete,
+      'status': status.name,
       'completedAt': completedAt?.toIso8601String(),
+      'startedAt': startedAt?.toIso8601String(),
+      'actualDurationMinutes': actualDurationMinutes,
       'date': date.toIso8601String(),
       'carriedFromDate': carriedFromDate?.toIso8601String(),
     };
@@ -158,10 +200,16 @@ class Task {
       final priority = Priority.values.firstWhere(
         (e) => e.name == json['priority'],
       );
-      final isComplete = json['isComplete'] as bool;
+      final status = TaskStatus.values.firstWhere(
+        (e) => e.name == json['status'],
+      );
       final completedAt = json['completedAt'] == null
           ? null
           : DateTime.parse(json['completedAt'] as String);
+      final startedAt = json['startedAt'] == null
+          ? null
+          : DateTime.parse(json['startedAt'] as String);
+      final actualDurationMinutes = json['actualDurationMinutes'] as int?;
       final date = DateTime.parse(json['date'] as String);
       final carriedFromDate = json['carriedFromDate'] == null
           ? null
@@ -174,8 +222,10 @@ class Task {
         type: type,
         startTime: startTime,
         priority: priority,
-        isComplete: isComplete,
+        status: status,
         completedAt: completedAt,
+        startedAt: startedAt,
+        actualDurationMinutes: actualDurationMinutes,
         date: date,
         carriedFromDate: carriedFromDate,
       );

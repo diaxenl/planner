@@ -30,11 +30,39 @@ class Scheduler {
     final dayEndMin = dayEndHour * 60;
     final effectiveNow = nowMinutes ?? dayStartMin;
 
+    // Resolves the anchor start time for a fixed-block task: its own
+    // `startTime` (hard/pinned), or — for an in-progress floating task
+    // that has no fixed `startTime` — the moment it was actually started.
+    // Falls back to "now" if neither is available (shouldn't normally
+    // happen, but keeps the scheduler total).
+    TimeOfDay anchorFor(Task t) {
+      if (t.startTime != null) return t.startTime!;
+      if (t.startedAt != null) return TimeOfDay.fromDateTime(t.startedAt!);
+      return TimeOfDay(hour: effectiveNow ~/ 60, minute: effectiveNow % 60);
+    }
+
     // ── 1. Separate fixed and floating tasks ──────────────────────────
     final fixedTasks = <Task>[];
     final floatingTasks = <Task>[];
 
     for (final task in tasks) {
+      // Completed/cancelled tasks are a frozen historical record: if they
+      // already occupy a fixed slot (hard/pinned), that slot stays
+      // blocked; otherwise they are excluded rather than being (re-)
+      // placed by the greedy floating fill.
+      if (task.status == TaskStatus.complete ||
+          task.status == TaskStatus.cancelled) {
+        if (task.startTime != null) fixedTasks.add(task);
+        continue;
+      }
+
+      // An in-progress task is never displaced — it occupies a fixed
+      // block anchored at the time it was actually started.
+      if (task.status == TaskStatus.inProgress) {
+        fixedTasks.add(task);
+        continue;
+      }
+
       if (task.type == TaskType.floating && task.startTime == null) {
         floatingTasks.add(task);
       } else if (task.startTime != null) {
@@ -44,7 +72,7 @@ class Scheduler {
 
     // ── 2. Build fixed blocks sorted by start time ────────────────────
     final fixedBlocks = fixedTasks.map((t) {
-      final startMin = t.startTime!.hour * 60 + t.startTime!.minute;
+      final startMin = anchorFor(t).hour * 60 + anchorFor(t).minute;
       return _Block(task: t, startMin: startMin, endMin: startMin + t.durationMinutes);
     }).toList()
       ..sort((a, b) => a.startMin.compareTo(b.startMin));
@@ -52,8 +80,9 @@ class Scheduler {
     // Start committed list with all fixed tasks.
     final committed = <ScheduledTask>[
       for (final b in fixedBlocks)
-        ScheduledTask(task: b.task, computedStartTime: b.task.startTime!),
+        ScheduledTask(task: b.task, computedStartTime: anchorFor(b.task)),
     ];
+
 
     // ── 3. Compute free gaps ──────────────────────────────────────────
     final gaps = <_Gap>[];

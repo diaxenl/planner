@@ -71,7 +71,8 @@ class UnscheduledSection extends StatelessWidget {
             child: TaskCard(
               task: task,
               onTap: () => onTap(task),
-              onComplete: task.isComplete ? null : () => onComplete(task),
+              onComplete:
+                  task.status == TaskStatus.complete ? null : () => onComplete(task),
               onDismissed: () => onDismissed(task),
             ),
           ),
