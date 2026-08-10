@@ -1,6 +1,8 @@
 # HyperDay — Phase Tracker
 
-This file tracks implementation progress across all phases. Subsequent agents should read this file to determine where to pick up.
+This file tracks implementation progress across all phases. Subsequent agents should read this file to determine where to pick up. Product vision and detailed rationale for Phases 8+ live in [plan-hyperDay.prompt.md](plan-hyperDay.prompt.md) — this file is the actionable checklist only; do not duplicate design rationale here.
+
+**Phases 1–7 below are the completed v1 foundation** (static timeline planner). **Phases 8–13 are the new Adaptive Focus Planner overhaul** — see the PRD for why each phase exists.
 
 ---
 
@@ -87,4 +89,53 @@ This file tracks implementation progress across all phases. Subsequent agents sh
 
 ---
 
-**Current status:** Phase 7 complete.
+## Phase 8 — Data Model & State Overhaul
+- [ ] Add `TaskStatus` enum (`notStarted`, `inProgress`, `complete`, `cancelled`) to `models/task.dart`
+- [ ] Replace `Task.isComplete` (bool) with `Task.status` (`TaskStatus`); keep `completedAt`
+- [ ] Add `Task.startedAt` (`DateTime?`) and `Task.actualDurationMinutes` (`int?`)
+- [ ] Update `Task.copyWith`, `toJson`, `fromJson` for the new fields/enum
+- [ ] Update every `isComplete` read/write site across `state/`, `services/`, `features/` to use `status`
+- [ ] Update `Scheduler.schedule()`: treat `inProgress` tasks as fixed blocks (like hard tasks); `cancelled` tasks are excluded like completed ones
+- [ ] Update `_scheduleFieldsChanged` in `DayPlannerModel` to include `status`/`startedAt` transitions
+
+## Phase 9 — Adaptive Replanning Everywhere
+- [ ] Add `DayPlannerModel.startTask(id)` — sets `status = inProgress`, `startedAt = now`, reschedules
+- [ ] Add `DayPlannerModel.cancelTask(id)` — sets `status = cancelled`, reschedules
+- [ ] Update `markComplete` — compute `actualDurationMinutes` from `startedAt`/`completedAt` (fallback: `startedAt = completedAt` if never started)
+- [ ] Extend suggestion-diff generation (currently only in `markComplete`) to run after `addTask`, `updateTask`, `removeTask`, `startTask`, `cancelTask`
+- [ ] Define "silent vs. suggested" rule: auto-commit reschedules that don't move an already-committed task or change overflow membership; otherwise populate `_suggestion` for the banner
+- [ ] Add overrun detection: while a task is `inProgress` and elapsed time (`now - startedAt`) exceeds `durationMinutes`, mark it overrunning and reschedule using elapsed time as the effective duration for downstream placement
+- [ ] Add a lightweight recurring check (e.g. periodic `Timer` while an `inProgress` task exists) to detect overruns without requiring a user action
+
+## Phase 10 — Live Time Tracking UI
+- [ ] Add Start / Complete / Cancel actions to `TaskCard` (replacing the single complete-only check icon), gated by allowed status transitions
+- [ ] Add a live elapsed-time readout on the `inProgress` task's card (ticking label, e.g. "12m elapsed")
+- [ ] Add a visual overrun state (color/border change) once elapsed time exceeds the estimate
+- [ ] Add a variance badge on completed cards: "Est 30m · Actual 42m (+12m)"
+- [ ] Add a "Cancelled" visual treatment (struck-through, muted) distinct from "Complete"
+
+## Phase 11 — Focus Now Screen
+- [ ] Create `lib/features/focus/focus_screen.dart` — new primary screen
+- [ ] Implement "current task" selection: `inProgress` task if any, else the committed task whose window contains now, else the next upcoming committed task
+- [ ] Create `widgets/focus_card.dart` — current task detail, live timer, Start/Complete/Cancel controls
+- [ ] Create `widgets/up_next_strip.dart` — preview of the next 1–2 committed tasks
+- [ ] Create `widgets/day_health_chip.dart` — comfortable/tight/overloaded indicator from remaining committed + overflow duration vs. remaining day window
+- [ ] Add a nav affordance from Focus Screen to the existing Timeline (`DayScreen`) view and back
+- [ ] Update `app.dart` — `home:` becomes `FocusScreen` (was `DayScreen`)
+
+## Phase 12 — Natural-Language Quick Capture
+- [ ] Create `lib/services/task_text_parser.dart` — pure Dart parser, no new dependency
+- [ ] Parse duration shorthand (`30m`, `1h`, `1h30m`), clock time (`3pm`, `15:00` → pinned type), explicit lock markers (`!!`, `locked` → hard type), priority markers (`!`, `high`, `low`)
+- [ ] Apply smart defaults for unparsed fields (duration 30 min if floating, priority medium)
+- [ ] Create `widgets/quick_capture_bar.dart` — free-text field that opens the existing `TaskBottomSheet` pre-filled with parsed fields as a confirmation/adjustment step before saving
+- [ ] Add a "Something came up" shortcut that opens the same quick-capture flow pre-set to high priority
+- [ ] Wire quick capture entry points into the Focus Screen
+
+## Phase 13 — Estimate Accuracy Surfacing
+- [ ] Add per-task variance display on completed `TaskCard`s (reuses data added in Phase 10)
+- [ ] Add a `DayPlannerModel` getter for a same-day aggregate accuracy stat (e.g. average overrun % across today's completed tasks, excluding cancelled)
+- [ ] Surface the aggregate stat subtly on the Focus Screen (e.g. small footer text)
+
+---
+
+**Current status:** Phase 7 (v1 foundation) complete. Phases 8–13 (Adaptive Focus Planner overhaul) not started — see [plan-hyperDay.prompt.md](plan-hyperDay.prompt.md) for the full product spec.
