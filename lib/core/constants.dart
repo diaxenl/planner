@@ -40,4 +40,8 @@ class AppConstants {
 
   /// Maximum task duration in minutes (8 hours).
   static const int durationMaxMinutes = 480;
+
+  // ── Adaptive replanning ─────────────────────────────────────────────
+  /// How often to re-check for task overruns while a task is in progress.
+  static const Duration overrunCheckInterval = Duration(seconds: 30);
 }

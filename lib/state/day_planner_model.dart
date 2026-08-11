@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import '../core/constants.dart';
 import '../models/day_schedule.dart';
 import '../models/schedule_suggestion.dart';
-import '../models/scheduled_task.dart';
 import '../models/task.dart';
 import '../services/day_repository.dart';
 import '../services/scheduler.dart';
@@ -50,7 +49,9 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
   ScheduleSuggestion? _suggestion;
 
   /// A pending reschedule suggestion, if any.
-  /// Non-null after a task is completed and floating tasks can shift.
+  /// Non-null after a mutation (add/edit/delete/start/cancel/complete, or
+  /// an overrun detection) causes the schedule to shift in a way that
+  /// affects tasks other than the one directly mutated.
   ScheduleSuggestion? get suggestion => _suggestion;
 
   bool _isLoading = false;
@@ -83,6 +84,7 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     }
 
     _reschedule();
+    _ensureOverrunMonitor();
     _isLoading = false;
     notifyListeners();
   }
@@ -110,6 +112,7 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
   @override
   void dispose() {
     _saveTimer?.cancel();
+    _overrunTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -123,7 +126,8 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
   void addTask(Task task) {
     _validateOverlap(task);
     _tasks.add(task);
-    _reschedule();
+    _rescheduleAndDiff(excludeTaskId: task.id);
+    _ensureOverrunMonitor();
     _scheduleSave();
     notifyListeners();
   }
@@ -135,7 +139,8 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     final index = _tasks.indexWhere((t) => t.id == id);
     if (index == -1) return false;
     _tasks.removeAt(index);
-    _reschedule();
+    _rescheduleAndDiff(excludeTaskId: id);
+    _ensureOverrunMonitor();
     _scheduleSave();
     notifyListeners();
     return true;
@@ -155,36 +160,81 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
 
     // Only reschedule if schedule-affecting fields changed.
     if (_scheduleFieldsChanged(old, updated)) {
-      _reschedule();
+      _rescheduleAndDiff(excludeTaskId: id);
     }
 
+    _ensureOverrunMonitor();
+    _scheduleSave();
+    notifyListeners();
+  }
+
+  /// Marks the task with [id] as [TaskStatus.inProgress] and starts its
+  /// live time tracker (`startedAt = now`). No-op if the task is not
+  /// currently [TaskStatus.notStarted].
+  void startTask(String id) {
+    final index = _tasks.indexWhere((t) => t.id == id);
+    if (index == -1) return;
+    if (_tasks[index].status != TaskStatus.notStarted) return;
+
+    _tasks[index] = _tasks[index].copyWith(
+      status: TaskStatus.inProgress,
+      startedAt: () => DateTime.now(),
+    );
+    _rescheduleAndDiff(excludeTaskId: id);
+    _ensureOverrunMonitor();
+    _scheduleSave();
+    notifyListeners();
+  }
+
+  /// Marks the task with [id] as [TaskStatus.cancelled], freeing its slot.
+  /// Available from [TaskStatus.notStarted] or [TaskStatus.inProgress];
+  /// no-op if the task is already `complete` or `cancelled`.
+  void cancelTask(String id) {
+    final index = _tasks.indexWhere((t) => t.id == id);
+    if (index == -1) return;
+    final current = _tasks[index];
+    if (current.status == TaskStatus.complete ||
+        current.status == TaskStatus.cancelled) {
+      return;
+    }
+
+    _tasks[index] = current.copyWith(status: TaskStatus.cancelled);
+    _rescheduleAndDiff(excludeTaskId: id);
+    _ensureOverrunMonitor();
     _scheduleSave();
     notifyListeners();
   }
 
   /// Marks the task with [id] as complete at the given [completedAt] time.
   ///
+  /// Computes [Task.actualDurationMinutes] from [Task.startedAt] to
+  /// [completedAt]; if the task was never started, `startedAt` is backfilled
+  /// to [completedAt] (zero tracked time).
+  ///
   /// After marking complete, computes a proposed reschedule and generates
-  /// a [ScheduleSuggestion] if any floating tasks would shift.
+  /// a [ScheduleSuggestion] if any other tasks would shift.
   void markComplete(String id, DateTime completedAt) {
     final index = _tasks.indexWhere((t) => t.id == id);
     if (index == -1) return;
-
-    // Snapshot the current committed schedule before the change.
-    final oldCommitted = _schedule.committed;
-
-    _tasks[index] = _tasks[index].copyWith(
-      status: TaskStatus.complete,
-      completedAt: () => completedAt,
-    );
-    _reschedule();
-
-    // Generate suggestion by diffing old vs new schedules.
-    _suggestion = _buildSuggestion(oldCommitted, _schedule);
-    if (!_suggestion!.hasChanges) {
-      _suggestion = null;
+    final current = _tasks[index];
+    if (current.status == TaskStatus.complete ||
+        current.status == TaskStatus.cancelled) {
+      return;
     }
 
+    final startedAt = current.startedAt ?? completedAt;
+    final rawMinutes = completedAt.difference(startedAt).inMinutes;
+    final actualDurationMinutes = rawMinutes < 0 ? 0 : rawMinutes;
+
+    _tasks[index] = current.copyWith(
+      status: TaskStatus.complete,
+      completedAt: () => completedAt,
+      startedAt: () => startedAt,
+      actualDurationMinutes: () => actualDurationMinutes,
+    );
+
+    _rescheduleAndDiff(excludeTaskId: id);
+    _ensureOverrunMonitor();
     _scheduleSave();
     notifyListeners();
   }
@@ -192,8 +242,8 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
   /// Accepts the current suggestion, committing the proposed schedule.
   void acceptSuggestion() {
     if (_suggestion == null) return;
-    // The proposed schedule is already _schedule (reschedule ran on
-    // markComplete). We just clear the suggestion.
+    // The proposed schedule is already _schedule (reschedule ran as part
+    // of the triggering mutation). We just clear the suggestion.
     _suggestion = null;
     notifyListeners();
   }
@@ -262,6 +312,7 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
           t.type != TaskType.hard &&
           !alreadyCarriedIds.contains(t.id))) {
         _reschedule();
+        _ensureOverrunMonitor();
         await _saveNow();
         notifyListeners();
       }
@@ -281,6 +332,32 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     );
   }
 
+  /// Re-runs [_reschedule] and diffs the result against the previous
+  /// schedule to decide whether the change should be surfaced as a
+  /// [ScheduleSuggestion] banner.
+  ///
+  /// [excludeTaskId], when provided, is the id of the task that directly
+  /// triggered the mutation (e.g. the task just added, started, cancelled,
+  /// or completed) — its own repositioning is a direct, expected effect
+  /// of the mutation and is never itself reported as a move.
+  ///
+  /// The recompute is always applied (this._schedule reflects the latest
+  /// truth). A suggestion is only populated — surfacing the Accept/Dismiss
+  /// banner — when it would move an already-committed task, or change
+  /// which tasks are in the overflow list, other than [excludeTaskId].
+  /// Otherwise the change is auto-committed silently (no banner).
+  void _rescheduleAndDiff({String? excludeTaskId}) {
+    final oldSchedule = _schedule;
+    _reschedule();
+
+    final candidate = _buildSuggestion(
+      oldSchedule,
+      _schedule,
+      excludeTaskId: excludeTaskId,
+    );
+    _suggestion = candidate.hasChanges ? candidate : null;
+  }
+
   /// Returns `true` if any schedule-affecting field differs between
   /// [oldTask] and [newTask]. Title-only edits return `false`.
   static bool _scheduleFieldsChanged(Task oldTask, Task newTask) {
@@ -292,24 +369,59 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
         oldTask.startedAt != newTask.startedAt;
   }
 
+  // ── Overrun monitoring ──────────────────────────────────────────────
+
+  Timer? _overrunTimer;
+
+  /// Starts or stops the periodic overrun-check timer depending on
+  /// whether any task is currently [TaskStatus.inProgress]. While such a
+  /// task exists, the schedule is periodically recomputed so a task
+  /// running past its estimate is reflected in downstream floating-task
+  /// placement without requiring another user action.
+  void _ensureOverrunMonitor() {
+    final hasInProgress = _tasks.any((t) => t.status == TaskStatus.inProgress);
+    if (hasInProgress) {
+      _overrunTimer ??= Timer.periodic(
+        AppConstants.overrunCheckInterval,
+        (_) => _checkOverrun(),
+      );
+    } else {
+      _overrunTimer?.cancel();
+      _overrunTimer = null;
+    }
+  }
+
+  /// Recomputes the schedule so an in-progress task that has started
+  /// overrunning its estimate is reflected in downstream placement,
+  /// surfacing a suggestion if the recompute displaces other tasks.
+  void _checkOverrun() {
+    _rescheduleAndDiff();
+    notifyListeners();
+  }
+
   // ── Suggestion diff ─────────────────────────────────────────────────
 
-  /// Compares the old committed list against the new [proposed] schedule.
+  /// Compares [oldSchedule] against the new [proposed] schedule.
   ///
   /// Produces a [ScheduleSuggestion] containing moves for any incomplete
-  /// non-hard task whose computed start time changed.
+  /// non-hard task whose computed start time changed, and flags whether
+  /// any task moved into/out of the overflow list — excluding
+  /// [excludeTaskId], whose own repositioning is a direct effect of the
+  /// mutation that produced [proposed], not a side effect on other tasks.
   static ScheduleSuggestion _buildSuggestion(
-    List<ScheduledTask> oldCommitted,
-    DaySchedule proposed,
-  ) {
+    DaySchedule oldSchedule,
+    DaySchedule proposed, {
+    String? excludeTaskId,
+  }) {
     // Build a lookup: taskId → old start minutes.
     final oldStarts = <String, TimeOfDay>{};
-    for (final st in oldCommitted) {
+    for (final st in oldSchedule.committed) {
       oldStarts[st.task.id] = st.computedStartTime;
     }
 
     final moves = <TaskMove>[];
     for (final st in proposed.committed) {
+      if (st.task.id == excludeTaskId) continue;
       // Hard tasks are never moved.
       if (st.task.type == TaskType.hard) continue;
       // Only report moves for tasks that are still active.
@@ -329,7 +441,20 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
       }
     }
 
-    return ScheduleSuggestion(proposed: proposed, moves: moves);
+    Set<String> overflowIds(List<Task> tasks) => tasks
+        .where((t) => t.id != excludeTaskId)
+        .map((t) => t.id)
+        .toSet();
+
+    final oldOverflowIds = overflowIds(oldSchedule.overflow);
+    final newOverflowIds = overflowIds(proposed.overflow);
+    final overflowChanged = !setEquals(oldOverflowIds, newOverflowIds);
+
+    return ScheduleSuggestion(
+      proposed: proposed,
+      moves: moves,
+      overflowChanged: overflowChanged,
+    );
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────

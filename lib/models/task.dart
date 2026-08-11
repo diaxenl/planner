@@ -148,6 +148,13 @@ class Task {
     return TimeOfDay(hour: totalMinutes ~/ 60, minute: totalMinutes % 60);
   }
 
+  /// Returns `true` if this task is [TaskStatus.inProgress] and the
+  /// elapsed time since [startedAt] exceeds [durationMinutes] as of [now].
+  bool isOverrunning(DateTime now) {
+    if (status != TaskStatus.inProgress || startedAt == null) return false;
+    return now.difference(startedAt!).inMinutes > durationMinutes;
+  }
+
   // ── ID generation ──────────────────────────────────────────────────
 
   static final Random _rng = Random.secure();
