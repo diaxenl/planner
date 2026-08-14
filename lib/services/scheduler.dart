@@ -41,6 +41,22 @@ class Scheduler {
       return TimeOfDay(hour: effectiveNow ~/ 60, minute: effectiveNow % 60);
     }
 
+    // Effective duration used to block time for downstream gap
+    // computation. Normally the task's own estimate, but for a task
+    // that is `inProgress` and has run longer than its estimate (an
+    // overrun), the elapsed real time since `startedAt` is used instead
+    // so the rest of the day reflects reality rather than the stale
+    // estimate.
+    int effectiveDurationFor(Task t) {
+      if (t.status == TaskStatus.inProgress && t.startedAt != null) {
+        final startedMin =
+            t.startedAt!.hour * 60 + t.startedAt!.minute;
+        final elapsed = effectiveNow - startedMin;
+        if (elapsed > t.durationMinutes) return elapsed;
+      }
+      return t.durationMinutes;
+    }
+
     // ── 1. Separate fixed and floating tasks ──────────────────────────
     final fixedTasks = <Task>[];
     final floatingTasks = <Task>[];
@@ -73,7 +89,8 @@ class Scheduler {
     // ── 2. Build fixed blocks sorted by start time ────────────────────
     final fixedBlocks = fixedTasks.map((t) {
       final startMin = anchorFor(t).hour * 60 + anchorFor(t).minute;
-      return _Block(task: t, startMin: startMin, endMin: startMin + t.durationMinutes);
+      final durationMin = effectiveDurationFor(t);
+      return _Block(task: t, startMin: startMin, endMin: startMin + durationMin);
     }).toList()
       ..sort((a, b) => a.startMin.compareTo(b.startMin));
 

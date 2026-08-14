@@ -20,14 +20,15 @@ class TaskMove {
   final TimeOfDay newStart;
 }
 
-/// A reschedule proposal generated after a task is marked complete.
-///
-/// Contains the proposed [DaySchedule] and a list of [TaskMove] diffs
-/// showing which tasks would shift and by how much.
+/// A reschedule proposal generated after a mutation (add, edit, delete,
+/// start, cancel, complete, or an overrun detection) changes the
+/// computed schedule in a way that affects tasks other than the one
+/// directly mutated.
 class ScheduleSuggestion {
   const ScheduleSuggestion({
     required this.proposed,
     required this.moves,
+    this.overflowChanged = false,
   });
 
   /// The full proposed schedule if the suggestion is accepted.
@@ -37,12 +38,19 @@ class ScheduleSuggestion {
   /// Empty if no floating tasks changed position.
   final List<TaskMove> moves;
 
+  /// Whether tasks moved into or out of the overflow list (other than
+  /// the task that directly triggered the mutation).
+  final bool overflowChanged;
+
   /// Whether this suggestion actually proposes any changes.
-  bool get hasChanges => moves.isNotEmpty;
+  bool get hasChanges => moves.isNotEmpty || overflowChanged;
 
   /// A short human-readable summary, e.g. "2 tasks can shift earlier."
   String get summary {
-    if (moves.isEmpty) return 'No changes needed.';
+    if (!hasChanges) return 'No changes needed.';
+    if (moves.isEmpty) {
+      return 'Your day shifted — some tasks may now fit differently. Accept?';
+    }
     final count = moves.length;
     final noun = count == 1 ? 'task' : 'tasks';
     return '$count $noun can be rescheduled. Accept?';

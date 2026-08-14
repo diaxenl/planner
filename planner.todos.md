@@ -99,13 +99,13 @@ This file tracks implementation progress across all phases. Subsequent agents sh
 - [x] Update `_scheduleFieldsChanged` in `DayPlannerModel` to include `status`/`startedAt` transitions
 
 ## Phase 9 — Adaptive Replanning Everywhere
-- [ ] Add `DayPlannerModel.startTask(id)` — sets `status = inProgress`, `startedAt = now`, reschedules
-- [ ] Add `DayPlannerModel.cancelTask(id)` — sets `status = cancelled`, reschedules
-- [ ] Update `markComplete` — compute `actualDurationMinutes` from `startedAt`/`completedAt` (fallback: `startedAt = completedAt` if never started)
-- [ ] Extend suggestion-diff generation (currently only in `markComplete`) to run after `addTask`, `updateTask`, `removeTask`, `startTask`, `cancelTask`
-- [ ] Define "silent vs. suggested" rule: auto-commit reschedules that don't move an already-committed task or change overflow membership; otherwise populate `_suggestion` for the banner
-- [ ] Add overrun detection: while a task is `inProgress` and elapsed time (`now - startedAt`) exceeds `durationMinutes`, mark it overrunning and reschedule using elapsed time as the effective duration for downstream placement
-- [ ] Add a lightweight recurring check (e.g. periodic `Timer` while an `inProgress` task exists) to detect overruns without requiring a user action
+- [x] Add `DayPlannerModel.startTask(id)` — sets `status = inProgress`, `startedAt = now`, reschedules
+- [x] Add `DayPlannerModel.cancelTask(id)` — sets `status = cancelled`, reschedules
+- [x] Update `markComplete` — compute `actualDurationMinutes` from `startedAt`/`completedAt` (fallback: `startedAt = completedAt` if never started)
+- [x] Extend suggestion-diff generation (currently only in `markComplete`) to run after `addTask`, `updateTask`, `removeTask`, `startTask`, `cancelTask`
+- [x] Define "silent vs. suggested" rule: auto-commit reschedules that don't move an already-committed task or change overflow membership; otherwise populate `_suggestion` for the banner
+- [x] Add overrun detection: while a task is `inProgress` and elapsed time (`now - startedAt`) exceeds `durationMinutes`, mark it overrunning and reschedule using elapsed time as the effective duration for downstream placement
+- [x] Add a lightweight recurring check (e.g. periodic `Timer` while an `inProgress` task exists) to detect overruns without requiring a user action
 
 ## Phase 10 — Live Time Tracking UI
 - [ ] Add Start / Complete / Cancel actions to `TaskCard` (replacing the single complete-only check icon), gated by allowed status transitions
@@ -138,4 +138,4 @@ This file tracks implementation progress across all phases. Subsequent agents sh
 
 ---
 
-**Current status:** Phase 8 (Data Model & State Overhaul) complete. Phases 9–13 (Adaptive Focus Planner overhaul) not started — see [plan-hyperDay.prompt.md](plan-hyperDay.prompt.md) for the full product spec.
+**Current status:** Phases 8–9 (Data Model & State Overhaul; Adaptive Replanning Everywhere) complete. Phases 10–13 (Adaptive Focus Planner overhaul) not started — see [plan-hyperDay.prompt.md](plan-hyperDay.prompt.md) for the full product spec.
