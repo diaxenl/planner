@@ -42,8 +42,8 @@ class ScheduledTask {
 
   @override
   String toString() {
-    String _fmt(TimeOfDay t) =>
+    String fmt(TimeOfDay t) =>
         '${t.hour}:${t.minute.toString().padLeft(2, '0')}';
-    return 'ScheduledTask(${task.title}, ${_fmt(computedStartTime)}–${_fmt(computedEndTime)})';
+    return 'ScheduledTask(${task.title}, ${fmt(computedStartTime)}–${fmt(computedEndTime)})';
   }
 }
