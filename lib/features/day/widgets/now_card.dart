@@ -19,6 +19,7 @@ class NowCard extends StatefulWidget {
   const NowCard({
     super.key,
     required this.item,
+    required this.hasAnyTasks,
     required this.onStart,
     required this.onDone,
     required this.onCancel,
@@ -26,6 +27,9 @@ class NowCard extends StatefulWidget {
   });
 
   final ScheduledTask? item;
+
+  /// Whether the day has anything on it at all (picks the empty copy).
+  final bool hasAnyTasks;
   final VoidCallback onStart;
   final VoidCallback onDone;
   final VoidCallback onCancel;
@@ -65,10 +69,19 @@ class _NowCardState extends State<NowCard> {
           children: [
             Text('NOW', style: text.labelSmall),
             const SizedBox(height: 8),
-            Text('Nothing left on the plan.', style: text.titleLarge),
+            Text(
+              widget.hasAnyTasks
+                  ? 'Nothing left on the plan.'
+                  : 'A clear day.',
+              style: text.titleLarge,
+            ),
             const SizedBox(height: 4),
-            Text('Capture something below, or call it a day.',
-                style: text.bodyMedium),
+            Text(
+              widget.hasAnyTasks
+                  ? 'Capture anything new below.'
+                  : 'Pick your outcomes to get started.',
+              style: text.bodyMedium,
+            ),
           ],
         ),
       );

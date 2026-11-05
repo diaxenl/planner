@@ -43,7 +43,8 @@ Status lifecycle is unchanged from Phase 8: `notStarted → inProgress → compl
 - Meetings, at-a-set-time items, and in-progress items are fixed blocks (unchanged).
 - Anytime items fill gaps from now onward: **Outcomes first**, then everything else; ties broken by shorter duration first. (Replaces priority ordering.)
 - Anything that cannot fit goes to **overflow** — an unplaced Outcome is called out prominently ("Outcome doesn't fit today").
-- Adaptive replanning, overrun handling, and the Accept/Dismiss suggestion behavior from Phase 9 are unchanged.
+- Adaptive replanning and overrun handling from Phase 9 are kept. Today's schedule also re-flows silently once a minute, so not-started work never sits in the past.
+- **The "Your day shifted" banner is rare by design** (revised after persona review): it appears only when an **Outcome moves later** or something is **pushed out of the day**. Everything else (other work reshuffling, things moving earlier) is applied silently. The change is already applied; the banner offers **OK** or **Undo** (Undo holds the affected work where it was).
 
 ### Calendar import (must-have)
 
@@ -61,14 +62,14 @@ Status lifecycle is unchanged from Phase 8: `notStarted → inProgress → compl
    - **Now card** (today only) — the current item (in-progress, else the one whose window contains now, else the next upcoming), big live timer, **Start / Done / Cancel**. Overrun turns the timer to the accent warning color.
    - **Outcomes** — up to the outcome cap, with check state. If none are set: a single prompt, "What would make today a win?"
    - **Agenda** — the rest of the day, one line per item: time · title · duration. Meetings visually quieter than work. Overflow at the end.
-   - **Suggestion banner** — restyled; same Accept/Dismiss behavior.
+   - **Suggestion banner** — see the banner rule above (OK / Undo).
    - **Capture bar** — pinned to the bottom, like a message composer. Replaces the FAB.
 2. **Review** (end of day, reachable any time from Day).
    - Outcomes hit: e.g. **2 / 3**.
    - Time split, planned vs actual: Meetings / Outcomes / Other / Interruptions. Derived from kinds and flags — no tagging.
    - Estimate accuracy: one number (e.g. "Ran 18% over estimates").
    - Unfinished items, each decided explicitly: **Tomorrow** or **Drop**. This replaces automatic carry-forward.
-3. **Item sheet** — bottom sheet to confirm/edit an item: title, duration, kind, time (if set), Outcome toggle.
+3. **Item sheet** — bottom sheet to confirm/edit an item: title, duration, kind (with a one-line explanation), time (picker opens automatically), Outcome toggle (disabled with a note at the cap). For an existing unfinished item: **Start / Done / Cancel / Tomorrow**. Done, Cancel and Delete all offer **Undo**. Imported meetings open read-only.
 4. **Settings** — calendars to include, theme (Dark default / Light / System), daily outcome cap (default 3).
 
 The old vertical hour-grid timeline is **removed**. The load bar plus agenda replace it.
@@ -131,8 +132,8 @@ No other packages may be added without explicit approval (see `AGENTS.md`).
 - **Title:** required, 1–100 characters, trimmed.
 - **Duration:** required, integer, 5–480 minutes.
 - **Time:** start and end within the day window (6:00 AM – 11:00 PM).
-- **Overlap:** a Meeting or At-a-set-time item is rejected if it overlaps a Meeting (user-created or imported).
-- **Outcomes:** at most the user's outcome cap per day (default 3, Settings 1–5). Exceeding it is rejected with a clear message.
+- **Overlap:** fixed-time items (Meetings, user-created or imported, and At-a-set-time items) may not overlap each other. Completed/cancelled items no longer hold their slot. Imported meetings may overlap each other (double-booking happens; the calendar is the source of truth).
+- **Outcomes:** at most the user's outcome cap per day (default 3, Settings 1–5); completed Outcomes still count (it's a per-day commitment). Exceeding it is rejected with a clear message. Editing an existing Outcome is always allowed, so lowering the cap never locks today's Outcomes.
 - **Status transitions:** unchanged — Start only from `notStarted`; Done from `notStarted` (zero tracked time) or `inProgress`; Cancel from `notStarted` or `inProgress`.
 
 ---

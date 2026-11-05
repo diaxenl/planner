@@ -98,4 +98,74 @@ void main() {
       expect(DayStats.currentItem(s([a, b, done]), 11 * 60 + 5), isNull);
     });
   });
+
+  group('Phase 15 — review stats', () {
+    Task t(
+      int est, {
+      TaskType type = TaskType.floating,
+      bool outcome = false,
+      bool interruption = false,
+      TaskStatus status = TaskStatus.notStarted,
+      int? actual,
+    }) =>
+        Task(
+          title: 'T',
+          durationMinutes: est,
+          type: type,
+          startTime: type == TaskType.floating ? null : const TimeOfDay(hour: 9, minute: 0),
+          isOutcome: outcome,
+          isInterruption: interruption,
+          status: status,
+          actualDurationMinutes: actual,
+          date: _day,
+        );
+
+    test('timeSplit buckets planned vs actual', () {
+      final meeting = t(60, type: TaskType.hard);
+      final tasks = [
+        meeting,
+        t(90, outcome: true, status: TaskStatus.complete, actual: 120),
+        t(60, outcome: true),
+        t(30, status: TaskStatus.complete, actual: 20),
+        t(15, interruption: true, status: TaskStatus.complete, actual: 25),
+        t(45, status: TaskStatus.cancelled),
+      ];
+      final schedule = DaySchedule(
+        committed: [ScheduledTask(task: meeting, computedStartTime: const TimeOfDay(hour: 9, minute: 0))],
+        overflow: const [],
+      );
+
+      final split = DayStats.timeSplit(tasks, schedule);
+      expect(split.planned[TimeBucket.meetings], 60);
+      expect(split.actual[TimeBucket.meetings], 60);
+      expect(split.planned[TimeBucket.outcomes], 150);
+      expect(split.actual[TimeBucket.outcomes], 120);
+      expect(split.planned[TimeBucket.other], 30);
+      expect(split.actual[TimeBucket.other], 20);
+      expect(split.planned[TimeBucket.interruptions], 0);
+      expect(split.actual[TimeBucket.interruptions], 25);
+    });
+
+    test('estimateAccuracy ignores zero-tracked, meetings, cancelled', () {
+      expect(DayStats.estimateAccuracy([]), isNull);
+      final tasks = [
+        t(60, status: TaskStatus.complete, actual: 90),
+        t(40, status: TaskStatus.complete, actual: 30),
+        t(30, status: TaskStatus.complete, actual: 0),
+        t(30, type: TaskType.hard, status: TaskStatus.complete, actual: 60),
+        t(30, status: TaskStatus.cancelled, actual: 60),
+      ];
+      expect(DayStats.estimateAccuracy(tasks), 20);
+    });
+
+    test('outcomesHit ignores cancelled', () {
+      final tasks = [
+        t(30, outcome: true, status: TaskStatus.complete),
+        t(30, outcome: true),
+        t(30, outcome: true, status: TaskStatus.cancelled),
+        t(30),
+      ];
+      expect(DayStats.outcomesHit(tasks), (1, 2));
+    });
+  });
 }

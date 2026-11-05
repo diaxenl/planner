@@ -54,7 +54,7 @@ class AgendaList extends StatelessWidget {
           ),
         if (schedule.overflow.isNotEmpty) ...[
           const SizedBox(height: 24),
-          Text('DOESN\'T FIT TODAY', style: text.labelSmall),
+          Text("DOESN'T FIT", style: text.labelSmall),
           const SizedBox(height: 8),
           for (final t in schedule.overflow)
             _Row(time: '—', task: t, isCurrent: false, onTap: () => onTap(t)),

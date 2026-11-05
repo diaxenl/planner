@@ -4,7 +4,8 @@ import '../../../core/theme.dart';
 import '../../../core/utils.dart';
 import '../../../models/schedule_suggestion.dart';
 
-/// A proposed reschedule: what would move, with Accept / Keep as is.
+/// Tells the user their day shifted in a way that matters — an Outcome
+/// moved later or something no longer fits — with OK / Undo.
 class SuggestionBanner extends StatelessWidget {
   const SuggestionBanner({
     super.key,
@@ -37,6 +38,24 @@ class SuggestionBanner extends StatelessWidget {
               style: text.labelSmall?.copyWith(color: colors.accent)),
           const SizedBox(height: 6),
           Text(suggestion.summary, style: text.bodyLarge),
+          for (final t in suggestion.pushedOut)
+            Padding(
+              padding: const EdgeInsets.only(top: 6, right: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      t.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: text.bodyMedium,
+                    ),
+                  ),
+                  Text("Doesn't fit",
+                      style: text.bodySmall?.copyWith(color: colors.accent)),
+                ],
+              ),
+            ),
           for (final move in suggestion.moves)
             Padding(
               padding: const EdgeInsets.only(top: 6, right: 8),
@@ -61,11 +80,11 @@ class SuggestionBanner extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              TextButton(onPressed: onDismiss, child: const Text('Keep as is')),
+              TextButton(onPressed: onDismiss, child: const Text('Undo')),
               TextButton(
                 onPressed: onAccept,
                 style: TextButton.styleFrom(foregroundColor: colors.accent),
-                child: const Text('Accept'),
+                child: const Text('OK'),
               ),
             ],
           ),

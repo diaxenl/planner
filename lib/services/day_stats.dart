@@ -23,6 +23,17 @@ class LoadBreakdown {
   int get total => meetings + outcomes + other + free;
 }
 
+/// Where a day's time goes, for the end-of-day review.
+enum TimeBucket { meetings, outcomes, other, interruptions }
+
+/// Planned vs actual minutes per [TimeBucket].
+class TimeSplit {
+  const TimeSplit({required this.planned, required this.actual});
+
+  final Map<TimeBucket, int> planned;
+  final Map<TimeBucket, int> actual;
+}
+
 /// Pure, derived statistics over a day's schedule. No stored state.
 class DayStats {
   DayStats._();
@@ -100,5 +111,70 @@ class DayStats {
       if (st.startMinutes >= nowMinutes) return st;
     }
     return null;
+  }
+
+  /// The bucket a task's time counts toward. Meetings first, then
+  /// interruptions (unplanned by definition), then Outcomes, then other.
+  static TimeBucket bucketOf(Task t) {
+    if (t.type == TaskType.hard) return TimeBucket.meetings;
+    if (t.isInterruption) return TimeBucket.interruptions;
+    if (t.isOutcome) return TimeBucket.outcomes;
+    return TimeBucket.other;
+  }
+
+  /// Planned vs actual minutes per bucket. Meetings come from the
+  /// schedule (so imported calendar meetings count) and are assumed
+  /// attended as planned. Everything else is planned at its estimate and
+  /// counted as actual from tracked time on completed tasks. Interruptions
+  /// are never planned. Cancelled items count for nothing.
+  static TimeSplit timeSplit(List<Task> tasks, DaySchedule schedule) {
+    final planned = {for (final b in TimeBucket.values) b: 0};
+    final actual = {for (final b in TimeBucket.values) b: 0};
+
+    for (final st in schedule.committed) {
+      final t = st.task;
+      if (t.type != TaskType.hard || t.status == TaskStatus.cancelled) continue;
+      planned[TimeBucket.meetings] = planned[TimeBucket.meetings]! + t.durationMinutes;
+      actual[TimeBucket.meetings] = actual[TimeBucket.meetings]! + t.durationMinutes;
+    }
+
+    for (final t in tasks) {
+      if (t.type == TaskType.hard || t.status == TaskStatus.cancelled) continue;
+      final b = bucketOf(t);
+      if (b != TimeBucket.interruptions) {
+        planned[b] = planned[b]! + t.durationMinutes;
+      }
+      if (t.status == TaskStatus.complete) {
+        actual[b] = actual[b]! + (t.actualDurationMinutes ?? 0);
+      }
+    }
+    return TimeSplit(planned: planned, actual: actual);
+  }
+
+  /// How far actual time ran over (+) or under (−) estimates, as a whole
+  /// percentage, across completed non-meeting tasks with tracked time.
+  /// `null` when there is nothing to compare.
+  static int? estimateAccuracy(List<Task> tasks) {
+    var estimated = 0, actual = 0;
+    for (final t in tasks) {
+      if (t.type == TaskType.hard || t.status != TaskStatus.complete) continue;
+      final tracked = t.actualDurationMinutes ?? 0;
+      if (tracked <= 0) continue;
+      estimated += t.durationMinutes;
+      actual += tracked;
+    }
+    if (estimated == 0) return null;
+    return ((actual - estimated) * 100 / estimated).round();
+  }
+
+  /// (completed, total) Outcomes, ignoring cancelled ones.
+  static (int, int) outcomesHit(List<Task> tasks) {
+    final outcomes = tasks.where(
+      (t) => t.isOutcome && t.status != TaskStatus.cancelled,
+    );
+    return (
+      outcomes.where((t) => t.status == TaskStatus.complete).length,
+      outcomes.length,
+    );
   }
 }

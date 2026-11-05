@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:planner/models/task.dart';
+import 'package:planner/models/calendar_event.dart';
+import 'package:planner/services/calendar_source.dart';
 import 'package:planner/services/day_repository.dart';
 import 'package:planner/state/day_planner_model.dart';
 
@@ -116,15 +118,40 @@ void main() {
       expect(model.suggestion, isNull);
     }, skip: _tooLateForFloatingTests);
 
-    test('displacing an already-placed task surfaces a suggestion', () {
-      final low = _floating('Low', minutes: 60);
-      final high = _floating('High', minutes: 60, outcome: true);
+    test('pushing an Outcome later surfaces a suggestion', () {
+      final low = _floating('Low', minutes: 60, outcome: true);
+      final high = _floating('High', minutes: 30, outcome: true);
       model.addTask(low);
       model.addTask(high);
 
       expect(model.suggestion, isNotNull);
       expect(model.suggestion!.moves.map((m) => m.task.id), [low.id]);
     }, skip: _tooLateForFloatingTests);
+
+    test('reshuffling non-outcome work is silent', () {
+      model.addTask(_floating('Long', minutes: 60));
+      model.addTask(_floating('Short', minutes: 15));
+      expect(model.suggestion, isNull);
+    }, skip: _tooLateForFloatingTests);
+
+    test('an Outcome moving earlier is silent', () {
+      final first = _floating('First', minutes: 30, outcome: true);
+      final second = _floating('Second', minutes: 60, outcome: true);
+      model.addTask(first);
+      model.addTask(second);
+      model.acceptSuggestion();
+      model.removeTask(first.id);
+      expect(model.suggestion, isNull);
+    }, skip: _tooLateForFloatingTests);
+
+    test('work pushed out of the day is reported', () {
+      final now = TimeOfDay.now();
+      final left = 23 * 60 - (now.hour * 60 + now.minute);
+      final filler = _floating('Filler', minutes: left);
+      model.addTask(filler);
+      model.addTask(_floating('Urgent', minutes: 5, outcome: true));
+      expect(model.suggestion?.pushedOut.map((t) => t.id), [filler.id]);
+    }, skip: TimeOfDay.now().hour >= 15 || TimeOfDay.now().hour < 6);
 
     test('title-only edit does not surface a suggestion', () {
       final t = _floating('A');
@@ -134,11 +161,11 @@ void main() {
     }, skip: _tooLateForFloatingTests);
 
     test('Dismiss keeps displaced tasks at their previous positions', () {
-      final low = _floating('Low', minutes: 60);
+      final low = _floating('Low', minutes: 60, outcome: true);
       model.addTask(low);
       final before = _startOf(model, low);
 
-      model.addTask(_floating('High', minutes: 60, outcome: true));
+      model.addTask(_floating('High', minutes: 30, outcome: true));
       expect(model.suggestion, isNotNull);
 
       model.dismissSuggestion();
@@ -152,12 +179,12 @@ void main() {
         (tester) async {
       final model = DayPlannerModel();
       final active = _floating('Active');
-      final low = _floating('Low', minutes: 60);
+      final low = _floating('Low', minutes: 60, outcome: true);
       model
         ..addTask(active)
         ..startTask(active.id)
         ..addTask(low)
-        ..addTask(_floating('High', minutes: 60, outcome: true));
+        ..addTask(_floating('High', minutes: 30, outcome: true));
       expect(model.suggestion, isNotNull);
 
       await tester.pump(const Duration(seconds: 31));
@@ -313,6 +340,124 @@ void main() {
       expect(model.tasks, isEmpty);
     });
   });
+
+  group('Phase 12 review — validation', () {
+    late DayPlannerModel model;
+    setUp(() => model = DayPlannerModel());
+    tearDown(() => model.dispose());
+
+    Task fixed(String title, TaskType type, int hour, {int minutes = 60}) =>
+        Task(
+          title: title,
+          durationMinutes: minutes,
+          type: type,
+          startTime: TimeOfDay(hour: hour, minute: 0),
+          date: DateTime.now(),
+        );
+
+    test('a Meeting may not overlap a Set-time item, and vice versa', () {
+      model.addTask(fixed('Pinned', TaskType.pinned, 10));
+      expect(() => model.addTask(fixed('Meeting', TaskType.hard, 10)),
+          throwsArgumentError);
+      model.addTask(fixed('Meeting', TaskType.hard, 12));
+      expect(() => model.addTask(fixed('Pinned 2', TaskType.pinned, 12)),
+          throwsArgumentError);
+    });
+
+    test('finished fixed items free their slot', () {
+      final a = fixed('A', TaskType.pinned, 10);
+      model.addTask(a);
+      model.cancelTask(a.id);
+      model.addTask(fixed('B', TaskType.hard, 10));
+      expect(model.tasks.length, 2);
+    });
+
+    test('lowering the cap never locks editing existing Outcomes', () {
+      final outcomes = [
+        for (var i = 0; i < 3; i++) _floating('O$i', outcome: true),
+      ];
+      outcomes.forEach(model.addTask);
+      model.outcomeCap = 2;
+      model.updateTask(outcomes[0].id, outcomes[0].copyWith(title: 'Renamed'));
+      expect(model.tasks.first.title, 'Renamed');
+      final plain = _floating('Plain');
+      model.addTask(plain);
+      expect(() => model.updateTask(plain.id, plain.copyWith(isOutcome: true)),
+          throwsArgumentError);
+    });
+  });
+
+  group('Phase 14 — calendar import', () {
+    final day = DateTime.now();
+    DateTime at(int h, [int m = 0]) =>
+        DateTime(day.year, day.month, day.day, h, m);
+
+    test('timed events become read-only Meetings; all-day are labels',
+        () async {
+      final source = _FakeCalendar([
+        CalendarEvent(
+            id: 'e1',
+            calendarId: 'work',
+            title: 'Board prep',
+            start: at(14),
+            end: at(15)),
+        CalendarEvent(
+            id: 'e2',
+            calendarId: 'work',
+            title: 'Offsite',
+            start: at(0),
+            end: at(23, 59),
+            isAllDay: true),
+      ]);
+      final model = DayPlannerModel(calendarSource: source);
+      await model.loadDate(day);
+
+      final meeting = model.schedule.committed.single.task;
+      expect(meeting.title, 'Board prep');
+      expect(meeting.type, TaskType.hard);
+      expect(meeting.durationMinutes, 60);
+      expect(model.isImported(meeting), isTrue);
+      expect(model.tasks, isEmpty, reason: 'imported events are not tasks');
+      expect(model.allDayEvents.single.title, 'Offsite');
+      model.dispose();
+    });
+
+    test('imported meetings block overlapping fixed items', () async {
+      final model = DayPlannerModel(
+        calendarSource: _FakeCalendar([
+          CalendarEvent(
+              id: 'e1',
+              calendarId: 'c',
+              title: 'Sync',
+              start: at(9),
+              end: at(10)),
+        ]),
+      );
+      await model.loadDate(day);
+      expect(
+        () => model.addTask(Task(
+          title: 'Call',
+          durationMinutes: 30,
+          type: TaskType.pinned,
+          startTime: const TimeOfDay(hour: 9, minute: 30),
+          date: day,
+        )),
+        throwsArgumentError,
+      );
+      model.dispose();
+    });
+
+    test('calendar selection is passed to the source; failures are ignored',
+        () async {
+      final source = _FakeCalendar([], fail: true);
+      final model = DayPlannerModel(calendarSource: source)
+        ..calendarIds = {'work'};
+      await model.loadDate(day);
+      expect(source.lastIds, {'work'});
+      expect(model.schedule.committed, isEmpty);
+      model.dispose();
+    });
+  });
 }
 
 class _MemoryRepository implements DayRepository {
@@ -324,4 +469,28 @@ class _MemoryRepository implements DayRepository {
   @override
   Future<void> save(DateTime date, List<Task> tasks) async =>
       _days[date] = List.of(tasks);
+}
+
+class _FakeCalendar implements CalendarSource {
+  _FakeCalendar(this.events, {this.fail = false});
+
+  final List<CalendarEvent> events;
+  final bool fail;
+  Set<String>? lastIds;
+
+  @override
+  Future<bool> requestAccess() async => true;
+
+  @override
+  Future<List<DeviceCalendarInfo>> listCalendars() async => const [];
+
+  @override
+  Future<List<CalendarEvent>> eventsFor(
+    DateTime date,
+    Set<String>? calendarIds,
+  ) async {
+    lastIds = calendarIds;
+    if (fail) throw StateError('no access');
+    return events;
+  }
 }

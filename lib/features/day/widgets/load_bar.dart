@@ -72,9 +72,12 @@ class LoadBar extends StatelessWidget {
           spacing: 16,
           runSpacing: 4,
           children: [
-            _legend(context, colors.meeting, 'Meetings', load.meetings),
-            _legend(context, colors.accent, 'Outcomes', load.outcomes),
-            _legend(context, colors.other, 'Other', load.other),
+            if (load.meetings > 0)
+              _legend(context, colors.meeting, 'Meetings', load.meetings),
+            if (load.outcomes > 0)
+              _legend(context, colors.accent, 'Outcomes', load.outcomes),
+            if (load.other > 0)
+              _legend(context, colors.other, 'Other', load.other),
           ],
         ),
       ],

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'day_schedule.dart';
 import 'task.dart';
 
-/// A single proposed time change for one task.
+/// A single time change for one task.
 class TaskMove {
   const TaskMove({
     required this.task,
@@ -10,49 +10,48 @@ class TaskMove {
     required this.newStart,
   });
 
-  /// The task that would move.
+  /// The task that moved.
   final Task task;
 
-  /// Where the task is currently scheduled.
+  /// Where the task was scheduled before.
   final TimeOfDay oldStart;
 
-  /// Where the task would move to in the proposed schedule.
+  /// Where the task is scheduled now.
   final TimeOfDay newStart;
 }
 
-/// A reschedule proposal generated after a mutation (add, edit, delete,
-/// start, cancel, complete, or an overrun detection) changes the
-/// computed schedule in a way that affects tasks other than the one
-/// directly mutated.
+/// A replan worth telling the user about, raised after a mutation.
+///
+/// The new schedule is already applied; the user can keep it (OK) or undo
+/// it, which holds the affected work where it was.
 class ScheduleSuggestion {
   const ScheduleSuggestion({
     required this.proposed,
     required this.moves,
-    this.overflowChanged = false,
+    this.pushedOut = const [],
   });
 
-  /// The full proposed schedule if the suggestion is accepted.
+  /// The schedule now in effect.
   final DaySchedule proposed;
 
-  /// Individual task moves that differ from the current schedule.
-  /// Empty if no floating tasks changed position.
+  /// Outcomes that now start later than before.
   final List<TaskMove> moves;
 
-  /// Whether tasks moved into or out of the overflow list (other than
-  /// the task that directly triggered the mutation).
-  final bool overflowChanged;
+  /// Tasks that no longer fit in the day.
+  final List<Task> pushedOut;
 
-  /// Whether this suggestion actually proposes any changes.
-  bool get hasChanges => moves.isNotEmpty || overflowChanged;
+  /// Whether this suggestion actually reports anything.
+  bool get hasChanges => moves.isNotEmpty || pushedOut.isNotEmpty;
 
-  /// A short human-readable summary, e.g. "2 tasks can shift earlier."
+  /// A short human-readable headline.
   String get summary {
-    if (!hasChanges) return 'No changes needed.';
-    if (moves.isEmpty) {
-      return 'Your day shifted — some tasks may now fit differently. Accept?';
+    if (pushedOut.length == 1 && moves.isEmpty) {
+      return '"${pushedOut.single.title}" no longer fits.';
     }
-    final count = moves.length;
-    final noun = count == 1 ? 'task' : 'tasks';
-    return '$count $noun can be rescheduled. Accept?';
+    if (pushedOut.isNotEmpty) {
+      return '${pushedOut.length + moves.length} things were affected.';
+    }
+    if (moves.length == 1) return '"${moves.single.task.title}" moved later.';
+    return '${moves.length} outcomes moved later.';
   }
 }

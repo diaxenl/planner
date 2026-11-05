@@ -59,38 +59,45 @@ Summarized; see git history for the full itemized checklists.
 - [x] Tests: `loadBreakdown`, `currentItem`
 - [x] Fix: scheduler now plans non-today days from the start of the day window (was using the current clock time)
 - [x] Simple capture bar (title only → item sheet); parsing comes in Phase 13
-- [ ] Validation: review full Day screen in the running app (phone-sized)
+- [x] Validation: persona review (code-based — browser extension was not connected) → fixes below
+- [x] Review fix: silent once-a-minute re-flow of today (`DayPlannerModel.tick`)
+- [x] Review fix: banner only for Outcomes moving later / work pushed out; OK / Undo; lists what moved
+- [x] Review fix: item sheet Start / Done / Cancel / Tomorrow; Undo for Done, Cancel, Delete (errors caught)
+- [x] Review fix: fixed-time items can't overlap each other; cap message + edits never locked by a lowered cap
+- [x] Review fix: AM/PM + plain-language error copy; "Doesn't fit" copy; morning empty state; hide zero legend items
+- [x] Review fix: kind explanations in the sheet; time picker opens automatically; Outcome switch disabled at cap
+- [x] Review fix: imported meetings open read-only
 
 ## Phase 13 — Capture & Triage
-- [ ] `services/capture_parser.dart`: parse duration (`30m`, `1h`, `1h30m`; default 30m), time (`3pm`, `15:00` → At a set time), `*` → Outcome; remainder is the title
+- [x] `services/capture_parser.dart`: parse duration (`30m`, `1h`, `1h30m`; default 30m), time (`3pm`, `15:00` → At a set time), `*` → Outcome; remainder is the title
 - [ ] `widgets/capture_bar.dart`: pinned bottom text field; submit opens `item_sheet` pre-filled with the parsed draft (never saves directly)
 - [ ] "Something came up" button beside the capture bar → enter text → choose **Now** (add + start immediately) / **Later today** (Anytime) / **Tomorrow** (`moveToDate`); sets `isInterruption = true`
-- [ ] Tests: parser cases (each token alone, combined, none, edge cases like `1h30m`, `12pm`, `00:30` outside window)
+- [x] Tests: parser cases (each token alone, combined, none, edge cases like `1h30m`, `12pm`, `00:30` outside window)
 - [ ] Validation: review capture + interruption flows in the running app
 
 ## Phase 14 — Calendar Import
 - [ ] **Prerequisite:** Android SDK installed and `flutter doctor` Android toolchain green
 - [ ] **Stop and confirm with the owner** the exact calendar package and version (candidate: `device_calendar`) before touching `pubspec.yaml`
 - [ ] Add the confirmed package; add Android calendar read permission (and iOS usage description)
-- [ ] `models/calendar_event.dart`: read-only (id, calendarId, title, start, end, isAllDay)
-- [ ] `services/calendar_source.dart`: `CalendarSource` interface (`listCalendars()`, `eventsFor(date, calendarIds)`); `DeviceCalendarSource`; `NoCalendarSource` for desktop/web/tests
+- [x] `models/calendar_event.dart`: read-only (id, calendarId, title, start, end, isAllDay)
+- [x] `services/calendar_source.dart`: `CalendarSource` interface (`listCalendars()`, `eventsFor(date, calendarIds)`); `DeviceCalendarSource`; `NoCalendarSource` for desktop/web/tests
 - [ ] Request permission on first use with a plain explanation; handle denial gracefully (app works without calendars)
-- [ ] `DayPlannerModel`: load events for the viewed date on load / refresh / day change; convert timed events to fixed Meeting blocks for the scheduler only (not persisted); skip declined events where exposed
-- [ ] Overlap validation includes imported meetings
+- [x] `DayPlannerModel`: load events for the viewed date on load / refresh / day change; convert timed events to fixed Meeting blocks for the scheduler only (not persisted); skip declined events where exposed
+- [x] Overlap validation includes imported meetings
 - [ ] All-day events shown as a one-line label under the date header
 - [ ] Pull-to-refresh on the Day screen re-reads events
 - [ ] Settings: calendar picker (all selected by default) + note about syncing accounts to the phone
-- [ ] Tests: event → fixed-block conversion and overlap validation using a fake `CalendarSource`
+- [x] Tests: event → fixed-block conversion and overlap validation using a fake `CalendarSource`
 - [ ] Validation: on a real Android device with Google, Microsoft, and iCloud accounts synced
 
 ## Phase 15 — End-of-Day Review
-- [ ] `day_stats.dart`: `timeSplit(tasks, schedule)` → planned vs actual minutes for Meetings / Outcomes / Other / Interruptions; `estimateAccuracy(tasks)` → % over/under (excludes cancelled and zero-tracked tasks); `outcomesHit(tasks)`
+- [x] `day_stats.dart`: `timeSplit(tasks, schedule)` → planned vs actual minutes for Meetings / Outcomes / Other / Interruptions; `estimateAccuracy(tasks)` → % over/under (excludes cancelled and zero-tracked tasks); `outcomesHit(tasks)`
 - [ ] `features/review/review_screen.dart`: outcomes hit (e.g. 2 / 3), time split bars, accuracy line
 - [ ] Unfinished items list: each resolved via **Tomorrow** (`moveToDate`) or **Drop** (cancel)
 - [ ] Entry point from the Day screen (always available; emphasized after the last committed item ends)
-- [ ] Tests: `timeSplit`, `estimateAccuracy`, `outcomesHit`
+- [x] Tests: `timeSplit`, `estimateAccuracy`, `outcomesHit`
 - [ ] Validation: review a full simulated day end-to-end in the running app
 
 ---
 
-**Current status:** Engine (Phases 1–9) complete, including the 2026-11-05 Phase 9 fixes. Phases 10–12 built; Phase 12 persona review in progress.
+**Current status:** Engine (Phases 1–9) complete, including the 2026-11-05 Phase 9 fixes. Phases 10–12 complete (incl. persona review fixes). Engine pieces of 13–15 done ahead (parser, calendar model integration, review stats). **Next: Phase 13 UI.**

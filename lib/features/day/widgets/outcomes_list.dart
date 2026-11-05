@@ -77,7 +77,7 @@ class OutcomesList extends StatelessWidget {
           ? 'Done · took ${AppUtils.formatDuration(task.actualDurationMinutes!)}'
           : 'Done';
     } else if (overflowing) {
-      when = 'Doesn\'t fit today — free up time or shorten it';
+      when = "Doesn't fit — shorten it or move it to tomorrow";
     } else if (placed != null) {
       when = '${AppUtils.formatClock(placed.startMinutes)}'
           ' · ${AppUtils.formatDuration(task.durationMinutes)}';

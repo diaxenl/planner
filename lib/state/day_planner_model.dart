@@ -1,12 +1,14 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/material.dart';
 import '../core/constants.dart';
+import '../core/utils.dart';
 import '../models/day_schedule.dart';
 import '../models/schedule_suggestion.dart';
 import '../models/scheduled_task.dart';
 import '../models/task.dart';
+import '../models/calendar_event.dart';
+import '../services/calendar_source.dart';
 import '../services/day_repository.dart';
 import '../services/day_stats.dart';
 import '../services/scheduler.dart';
@@ -31,9 +33,13 @@ import '../services/scheduler.dart';
 /// from storage on [loadDate] and saves them after every mutation with a
 /// 500 ms debounce. On [AppLifecycleState.paused] the save is immediate.
 class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
-  DayPlannerModel({DateTime? initialDate, DayRepository? repository})
-      : _viewedDate = _dateOnly(initialDate ?? DateTime.now()),
-        _repository = repository;
+  DayPlannerModel({
+    DateTime? initialDate,
+    DayRepository? repository,
+    CalendarSource calendarSource = const NoCalendarSource(),
+  })  : _viewedDate = _dateOnly(initialDate ?? DateTime.now()),
+        _repository = repository,
+        _calendarSource = calendarSource;
 
   // ── State ───────────────────────────────────────────────────────────
 
@@ -104,6 +110,7 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
       final loaded = await _repository.load(_viewedDate);
       _tasks.addAll(loaded);
     }
+    _events = await _fetchEvents();
 
     _reschedule();
     _ensureOverrunMonitor();
@@ -331,6 +338,66 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     await _repository.save(target, [...targetTasks, moved]);
   }
 
+  // ── Calendar ────────────────────────────────────────────────────────
+
+  final CalendarSource _calendarSource;
+
+  /// Calendars to import from. `null` = all. Owned by settings; call
+  /// [refreshCalendar] after changing it.
+  Set<String>? calendarIds;
+
+  List<CalendarEvent> _events = const [];
+
+  static const _importedPrefix = 'cal:';
+
+  /// All-day events on the viewed day, shown as labels, not blocks.
+  List<CalendarEvent> get allDayEvents =>
+      _events.where((e) => e.isAllDay).toList(growable: false);
+
+  /// Whether [task] is an imported calendar meeting (read-only; it never
+  /// appears in [tasks] and is never persisted).
+  bool isImported(Task task) => task.id.startsWith(_importedPrefix);
+
+  /// Re-reads the viewed day's calendar events and replans. Surfaces a
+  /// suggestion if a new or moved meeting displaces scheduled work.
+  Future<void> refreshCalendar() async {
+    _events = await _fetchEvents();
+    _rescheduleAndDiff(releaseHolds: false);
+    notifyListeners();
+  }
+
+  Future<List<CalendarEvent>> _fetchEvents() async {
+    try {
+      return await _calendarSource.eventsFor(_viewedDate, calendarIds);
+    } catch (_) {
+      // Calendar access is best-effort; the planner works without it.
+      return const [];
+    }
+  }
+
+  /// Timed events as read-only Meeting tasks, clipped to the viewed day.
+  List<Task> get _eventTasks {
+    final dayStart = _viewedDate;
+    final dayEnd = dayStart.add(const Duration(days: 1));
+    return [
+      for (final e in _events)
+        if (!e.isAllDay && e.end.isAfter(dayStart) && e.start.isBefore(dayEnd))
+          () {
+            final start = e.start.isBefore(dayStart) ? dayStart : e.start;
+            final end = e.end.isAfter(dayEnd) ? dayEnd : e.end;
+            final minutes = end.difference(start).inMinutes;
+            return Task(
+              id: '$_importedPrefix${e.id}',
+              title: e.title.isEmpty ? 'Busy' : e.title,
+              durationMinutes: minutes < 1 ? 1 : minutes,
+              type: TaskType.hard,
+              startTime: TimeOfDay.fromDateTime(start),
+              date: _viewedDate,
+            );
+          }(),
+    ];
+  }
+
   // ── Scheduling ──────────────────────────────────────────────────────
 
   /// Re-runs the scheduling engine on the current task list.
@@ -342,6 +409,7 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     // then mapped back to the real (floating) task in the result.
     final result = Scheduler.schedule(
       [
+        ..._eventTasks,
         for (final t in _tasks)
           _heldStarts.containsKey(t.id)
               ? t.copyWith(
@@ -382,6 +450,15 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     return now.hour * 60 + now.minute;
   }
 
+  /// Re-flows today's schedule as the clock moves, so not-started work
+  /// never sits in the past. Silent: no suggestion is raised, and a
+  /// pending one is left as is. No-op when not viewing today.
+  void tick() {
+    if (!isViewingToday) return;
+    _reschedule();
+    notifyListeners();
+  }
+
   /// Whether the viewed day is today.
   bool get isViewingToday => _dateOnly(DateTime.now()) == _viewedDate;
 
@@ -401,7 +478,7 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     if (_heldStarts.isEmpty) return;
 
     final fixedBlocks = <(int, int)>[];
-    for (final t in _tasks) {
+    for (final t in [..._eventTasks, ..._tasks]) {
       if (_heldStarts.containsKey(t.id)) continue;
       if (t.status == TaskStatus.inProgress && t.startedAt != null) {
         final start = t.startedAt!.hour * 60 + t.startedAt!.minute;
@@ -508,61 +585,45 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
 
   // ── Suggestion diff ─────────────────────────────────────────────────
 
-  /// Compares [oldSchedule] against the new [proposed] schedule.
-  ///
-  /// Produces a [ScheduleSuggestion] containing moves for any incomplete
-  /// non-hard task whose computed start time changed, and flags whether
-  /// any task moved into/out of the overflow list — excluding
-  /// [excludeTaskId], whose own repositioning is a direct effect of the
-  /// mutation that produced [proposed], not a side effect on other tasks.
+  /// Compares [oldSchedule] against the new [proposed] schedule and
+  /// keeps only what deserves the user's attention:
+  /// - an active Outcome that now starts *later* (earlier is good news and
+  ///   other work reshuffling is noise — both are applied silently), and
+  /// - any task newly pushed out of the day into overflow.
+  /// [excludeTaskId] — the task the user just acted on — is never reported.
   static ScheduleSuggestion _buildSuggestion(
     DaySchedule oldSchedule,
     DaySchedule proposed, {
     String? excludeTaskId,
   }) {
-    // Build a lookup: taskId → old start minutes.
-    final oldStarts = <String, TimeOfDay>{};
-    for (final st in oldSchedule.committed) {
-      oldStarts[st.task.id] = st.computedStartTime;
-    }
+    final oldStarts = {
+      for (final st in oldSchedule.committed) st.task.id: st.startMinutes,
+    };
 
     final moves = <TaskMove>[];
     for (final st in proposed.committed) {
-      if (st.task.id == excludeTaskId) continue;
-      // Hard tasks are never moved.
-      if (st.task.type == TaskType.hard) continue;
-      // In-progress tasks are never moved (PRD: excluded from suggestions).
-      if (st.task.status == TaskStatus.inProgress) continue;
-      // Only report moves for tasks that are still active.
-      if (st.task.status == TaskStatus.complete) continue;
-      if (st.task.status == TaskStatus.cancelled) continue;
-
-      final oldStart = oldStarts[st.task.id];
-      if (oldStart == null) continue; // newly scheduled, not a move
-
-      if (oldStart.hour != st.computedStartTime.hour ||
-          oldStart.minute != st.computedStartTime.minute) {
-        moves.add(TaskMove(
-          task: st.task,
-          oldStart: oldStart,
-          newStart: st.computedStartTime,
-        ));
-      }
+      final t = st.task;
+      if (t.id == excludeTaskId) continue;
+      if (!t.isOutcome || t.status != TaskStatus.notStarted) continue;
+      final oldStart = oldStarts[t.id];
+      if (oldStart == null || st.startMinutes <= oldStart) continue;
+      moves.add(TaskMove(
+        task: t,
+        oldStart: TimeOfDay(hour: oldStart ~/ 60, minute: oldStart % 60),
+        newStart: st.computedStartTime,
+      ));
     }
 
-    Set<String> overflowIds(List<Task> tasks) => tasks
-        .where((t) => t.id != excludeTaskId)
-        .map((t) => t.id)
-        .toSet();
-
-    final oldOverflowIds = overflowIds(oldSchedule.overflow);
-    final newOverflowIds = overflowIds(proposed.overflow);
-    final overflowChanged = !setEquals(oldOverflowIds, newOverflowIds);
+    final oldOverflowIds = oldSchedule.overflow.map((t) => t.id).toSet();
+    final pushedOut = [
+      for (final t in proposed.overflow)
+        if (t.id != excludeTaskId && !oldOverflowIds.contains(t.id)) t,
+    ];
 
     return ScheduleSuggestion(
       proposed: proposed,
       moves: moves,
-      overflowChanged: overflowChanged,
+      pushedOut: pushedOut,
     );
   }
 
@@ -583,30 +644,35 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     final newStart = _toMinutes(task.startTime!);
     final newEnd = newStart + task.durationMinutes;
 
-    // Clamp to day window.
     final dayStart = AppConstants.dayStartHour * 60;
     final dayEnd = AppConstants.dayEndHour * 60;
     if (newStart < dayStart || newEnd > dayEnd) {
       throw ArgumentError(
-        'Task time range ${_fmtTime(task.startTime!)}–'
-        '${_fmtMinutes(newEnd)} falls outside the day window '
-        '(${AppConstants.dayStartHour}:00–${AppConstants.dayEndHour}:00).',
+        '${AppUtils.formatClock(newStart)}–${AppUtils.formatClock(newEnd)} '
+        'is outside your day (${AppUtils.formatClock(dayStart)}–'
+        '${AppUtils.formatClock(dayEnd)}).',
       );
     }
 
-    for (final existing in _tasks) {
+    // Fixed-time items (Meetings and Set-time items) may not overlap each
+    // other. Finished items no longer hold their slot for this purpose.
+    for (final existing in [..._eventTasks, ..._tasks]) {
       if (existing.id == excludeId) continue;
-      if (existing.type != TaskType.hard) continue;
+      if (existing.type == TaskType.floating) continue;
       if (existing.startTime == null) continue;
+      if (existing.status == TaskStatus.cancelled ||
+          existing.status == TaskStatus.complete) {
+        continue;
+      }
 
       final existStart = _toMinutes(existing.startTime!);
       final existEnd = existStart + existing.durationMinutes;
 
-      // Two ranges overlap if one starts before the other ends.
       if (newStart < existEnd && newEnd > existStart) {
         throw ArgumentError(
-          'Overlaps with hard task "${existing.title}" '
-          '(${_fmtTime(existing.startTime!)}–${_fmtMinutes(existEnd)}).',
+          'Overlaps "${existing.title}" '
+          '(${AppUtils.formatClock(existStart)}–'
+          '${AppUtils.formatClock(existEnd)}).',
         );
       }
     }
@@ -614,8 +680,14 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Throws [ArgumentError] if [task] is an Outcome and the day already
   /// has [outcomeCap] active (non-cancelled) Outcomes besides [excludeId].
+  /// Edits that keep an existing Outcome an Outcome are always allowed, so
+  /// lowering the cap never locks today's Outcomes.
   void _validateOutcomeCap(Task task, {String? excludeId}) {
     if (!task.isOutcome) return;
+    if (excludeId != null &&
+        _tasks.any((t) => t.id == excludeId && t.isOutcome)) {
+      return;
+    }
     final count = _tasks
         .where((t) =>
             t.id != excludeId &&
@@ -624,20 +696,11 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
         .length;
     if (count >= outcomeCap) {
       throw ArgumentError(
-        'You already have $outcomeCap outcome${outcomeCap == 1 ? '' : 's'} '
-        'today. Finish or remove one first.',
+        "That's your limit of $outcomeCap outcome${outcomeCap == 1 ? '' : 's'} "
+        'for the day. Remove one, or raise the limit in Settings.',
       );
     }
   }
 
   static int _toMinutes(TimeOfDay t) => t.hour * 60 + t.minute;
-
-  static String _fmtTime(TimeOfDay t) =>
-      '${t.hour}:${t.minute.toString().padLeft(2, '0')}';
-
-  static String _fmtMinutes(int totalMinutes) {
-    final h = totalMinutes ~/ 60;
-    final m = totalMinutes % 60;
-    return '$h:${m.toString().padLeft(2, '0')}';
-  }
 }

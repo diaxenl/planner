@@ -11,6 +11,10 @@ import '../../../state/day_planner_model.dart';
 /// Saves through [DayPlannerModel] directly so validation errors from the
 /// model (overlap, outcome cap) show inline instead of closing the sheet.
 /// Pops `true` when something was saved or deleted.
+///
+/// For an existing, unfinished item it also offers Start / Done / Cancel /
+/// Move to tomorrow, gated by status; the sheet closes and [onAction]
+/// performs it (so the caller can offer Undo).
 class ItemSheet extends StatefulWidget {
   const ItemSheet({
     super.key,
@@ -18,6 +22,7 @@ class ItemSheet extends StatefulWidget {
     this.existing,
     this.draft,
     this.onDeleted,
+    this.onAction,
   });
 
   final DayPlannerModel model;
@@ -32,12 +37,16 @@ class ItemSheet extends StatefulWidget {
   /// Called after a delete so the caller can offer undo.
   final ValueChanged<Task>? onDeleted;
 
+  /// Performs a status action on [existing] after the sheet closes.
+  final void Function(ItemAction action, Task task)? onAction;
+
   static Future<bool?> show(
     BuildContext context, {
     required DayPlannerModel model,
     Task? existing,
     Task? draft,
     ValueChanged<Task>? onDeleted,
+    void Function(ItemAction action, Task task)? onAction,
   }) {
     return showModalBottomSheet<bool>(
       context: context,
@@ -48,6 +57,7 @@ class ItemSheet extends StatefulWidget {
         existing: existing,
         draft: draft,
         onDeleted: onDeleted,
+        onAction: onAction,
       ),
     );
   }
@@ -55,6 +65,9 @@ class ItemSheet extends StatefulWidget {
   @override
   State<ItemSheet> createState() => _ItemSheetState();
 }
+
+/// Status actions offered on an existing item.
+enum ItemAction { start, done, cancel, tomorrow }
 
 class _ItemSheetState extends State<ItemSheet> {
   static const _durationPresets = [15, 30, 45, 60, 90, 120];
@@ -90,6 +103,21 @@ class _ItemSheetState extends State<ItemSheet> {
     final colors = HyperColors.of(context);
     final text = Theme.of(context).textTheme;
     final needsTime = _type != TaskType.floating;
+    final existing = widget.existing;
+
+    if (existing != null && widget.model.isImported(existing)) {
+      return _importedView(context, existing);
+    }
+
+    final atCap = !_isOutcome &&
+        !(existing?.isOutcome ?? false) &&
+        widget.model.tasks
+                .where((t) =>
+                    t.id != existing?.id &&
+                    t.isOutcome &&
+                    t.status != TaskStatus.cancelled)
+                .length >=
+            widget.model.outcomeCap;
 
     return Padding(
       padding: EdgeInsets.only(
@@ -103,6 +131,7 @@ class _ItemSheetState extends State<ItemSheet> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(_isEdit ? 'Edit' : 'New item', style: text.titleLarge),
+            if (existing != null) _actions(context, existing),
             const SizedBox(height: 16),
             TextField(
               controller: _title,
@@ -145,10 +174,26 @@ class _ItemSheetState extends State<ItemSheet> {
                 ButtonSegment(value: TaskType.hard, label: Text('Meeting')),
               ],
               selected: {_type},
-              onSelectionChanged: (s) => setState(() {
-                _type = s.first;
-                if (_type == TaskType.floating) _startTime = null;
-              }),
+              onSelectionChanged: (s) {
+                setState(() {
+                  _type = s.first;
+                  if (_type == TaskType.floating) _startTime = null;
+                });
+                if (_type != TaskType.floating && _startTime == null) {
+                  _pickTime();
+                }
+              },
+            ),
+            const SizedBox(height: 6),
+            Text(
+              switch (_type) {
+                TaskType.floating => 'HyperDay finds the best free slot.',
+                TaskType.pinned =>
+                  'You pick the time. Nothing else can be booked over it.',
+                TaskType.hard =>
+                  'A fixed commitment. Never moved, nothing booked over it.',
+              },
+              style: text.bodyMedium,
             ),
             if (needsTime) ...[
               const SizedBox(height: 8),
@@ -166,11 +211,14 @@ class _ItemSheetState extends State<ItemSheet> {
               contentPadding: EdgeInsets.zero,
               title: Text('Outcome', style: text.bodyLarge),
               subtitle: Text(
-                'One of the few things that make today a win',
+                atCap
+                    ? "You're at your limit of ${widget.model.outcomeCap}. "
+                        'Change it in Settings.'
+                    : 'One of the few things that make the day a win',
                 style: text.bodyMedium,
               ),
               value: _isOutcome,
-              onChanged: (v) => setState(() => _isOutcome = v),
+              onChanged: atCap ? null : (v) => setState(() => _isOutcome = v),
             ),
             if (_error != null) ...[
               const SizedBox(height: 8),
@@ -190,16 +238,87 @@ class _ItemSheetState extends State<ItemSheet> {
     );
   }
 
+  /// Start / Done / Cancel / Tomorrow, as allowed by the item's status.
+  Widget _actions(BuildContext context, Task task) {
+    final notStarted = task.status == TaskStatus.notStarted;
+    final inProgress = task.status == TaskStatus.inProgress;
+    if (!notStarted && !inProgress) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: Text(
+          task.status == TaskStatus.complete ? 'Done' : 'Cancelled',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+      );
+    }
+    final isMeeting = task.type == TaskType.hard;
+
+    Widget action(String label, ItemAction a) => Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: OutlinedButton(
+            onPressed: () {
+              Navigator.of(context).pop(true);
+              widget.onAction?.call(a, task);
+            },
+            child: Text(label),
+          ),
+        );
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            if (notStarted && !isMeeting) action('Start', ItemAction.start),
+            if (!isMeeting) action('Done', ItemAction.done),
+            action('Cancel', ItemAction.cancel),
+            if (notStarted) action('Tomorrow', ItemAction.tomorrow),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _importedView(BuildContext context, Task task) {
+    final text = Theme.of(context).textTheme;
+    final start = task.startTime!.hour * 60 + task.startTime!.minute;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(task.title, style: text.titleLarge),
+          const SizedBox(height: 6),
+          Text(
+            '${AppUtils.formatClock(start)}–'
+            '${AppUtils.formatClock(start + task.durationMinutes)}',
+            style: text.bodySmall,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'From your calendar. Edit it in your calendar app.',
+            style: text.bodyMedium,
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _label(BuildContext context, String label) => Padding(
         padding: const EdgeInsets.only(bottom: 8),
         child: Text(label, style: Theme.of(context).textTheme.labelSmall),
       );
 
   Future<void> _pickTime() async {
+    final now = TimeOfDay.now();
     final picked = await showTimePicker(
       context: context,
-      initialTime: _startTime ?? TimeOfDay.now(),
+      initialTime: _startTime ??
+          TimeOfDay(hour: (now.hour + 1).clamp(0, 23), minute: 0),
     );
+    if (!mounted) return;
     if (picked != null) setState(() => _startTime = picked);
   }
 
