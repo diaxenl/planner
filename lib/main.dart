@@ -14,8 +14,16 @@ void main() async {
   await settings.load();
 
   final model = DayPlannerModel(repository: LocalDayRepository())
-    ..outcomeCap = settings.settings.outcomeCap;
-  settings.addListener(() => model.outcomeCap = settings.settings.outcomeCap);
+    ..outcomeCap = settings.settings.outcomeCap
+    ..calendarIds = settings.settings.selectedCalendarIds;
+  settings.addListener(() {
+    model.outcomeCap = settings.settings.outcomeCap;
+    final ids = settings.settings.selectedCalendarIds;
+    if (ids != model.calendarIds) {
+      model.calendarIds = ids;
+      model.refreshCalendar();
+    }
+  });
   await model.loadDate(DateTime.now());
 
   runApp(

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme.dart';
 import '../../../core/utils.dart';
 
-/// "Today" + full date, with prev/next day and settings.
+/// "Today" + full date, with prev/next day, review, and settings.
 ///
 /// When viewing another day, tapping the title jumps back to today.
 class DayHeader extends StatelessWidget {
@@ -13,6 +13,7 @@ class DayHeader extends StatelessWidget {
     required this.onPreviousDay,
     required this.onNextDay,
     required this.onToday,
+    required this.onReview,
     required this.onSettings,
   });
 
@@ -20,6 +21,7 @@ class DayHeader extends StatelessWidget {
   final VoidCallback onPreviousDay;
   final VoidCallback onNextDay;
   final VoidCallback onToday;
+  final VoidCallback onReview;
   final VoidCallback onSettings;
 
   @override
@@ -66,6 +68,11 @@ class DayHeader extends StatelessWidget {
             tooltip: 'Next day',
             onPressed: onNextDay,
             icon: const Icon(Icons.chevron_right),
+          ),
+          IconButton(
+            tooltip: 'Review',
+            onPressed: onReview,
+            icon: const Icon(Icons.insights, size: 20),
           ),
           IconButton(
             tooltip: 'Settings',

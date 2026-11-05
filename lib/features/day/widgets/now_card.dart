@@ -24,6 +24,7 @@ class NowCard extends StatefulWidget {
     required this.onDone,
     required this.onCancel,
     required this.onTap,
+    required this.onReview,
   });
 
   final ScheduledTask? item;
@@ -34,6 +35,9 @@ class NowCard extends StatefulWidget {
   final VoidCallback onDone;
   final VoidCallback onCancel;
   final VoidCallback onTap;
+
+  /// Shown as "Review your day" once nothing is left on the plan.
+  final VoidCallback onReview;
 
   @override
   State<NowCard> createState() => _NowCardState();
@@ -82,6 +86,13 @@ class _NowCardState extends State<NowCard> {
                   : 'Pick your outcomes to get started.',
               style: text.bodyMedium,
             ),
+            if (widget.hasAnyTasks) ...[
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: widget.onReview,
+                child: const Text('Review your day'),
+              ),
+            ],
           ],
         ),
       );

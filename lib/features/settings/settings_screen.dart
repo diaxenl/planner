@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../core/constants.dart';
 import '../../core/theme.dart';
+import '../../models/calendar_event.dart';
+import '../../state/day_planner_provider.dart';
 import '../../state/settings_provider.dart';
 
-/// Theme and outcome-cap preferences.
+/// Theme, outcome cap, and which calendars to import meetings from.
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
@@ -80,8 +82,94 @@ class SettingsScreen extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: 32),
+          Text('CALENDARS', style: text.labelSmall),
+          const SizedBox(height: 12),
+          const _CalendarPicker(),
         ],
       ),
+    );
+  }
+}
+
+/// Lists the phone's calendars with a switch each. No selection saved
+/// means all calendars are imported.
+class _CalendarPicker extends StatefulWidget {
+  const _CalendarPicker();
+
+  @override
+  State<_CalendarPicker> createState() => _CalendarPickerState();
+}
+
+class _CalendarPickerState extends State<_CalendarPicker> {
+  Future<List<DeviceCalendarInfo>>? _calendars;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _calendars ??= DayPlannerProvider.of(context).listCalendars();
+  }
+
+  Future<void> _allowAccess() async {
+    final model = DayPlannerProvider.of(context);
+    await model.requestCalendarAccess();
+    if (!mounted) return;
+    setState(() => _calendars = model.listCalendars());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final settings = SettingsProvider.of(context);
+    final selected = settings.settings.selectedCalendarIds;
+
+    return FutureBuilder<List<DeviceCalendarInfo>>(
+      future: _calendars,
+      builder: (context, snapshot) {
+        final calendars = snapshot.data ?? const [];
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const SizedBox(height: 48);
+        }
+        if (calendars.isEmpty) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Meetings are imported from the calendars on this phone — '
+                'Google, Microsoft (Outlook / 365) and iCloud. Make sure your '
+                'accounts are synced to the phone, then allow access.',
+                style: text.bodyMedium,
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton(
+                onPressed: _allowAccess,
+                child: const Text('Allow calendar access'),
+              ),
+            ],
+          );
+        }
+        return Column(
+          children: [
+            for (final cal in calendars)
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(cal.name, style: text.bodyLarge),
+                subtitle: cal.accountName == null
+                    ? null
+                    : Text(cal.accountName!, style: text.bodyMedium),
+                value: selected == null || selected.contains(cal.id),
+                onChanged: (on) {
+                  final ids = selected ?? calendars.map((c) => c.id).toSet();
+                  final next = {...ids};
+                  on ? next.add(cal.id) : next.remove(cal.id);
+                  settings.setSelectedCalendarIds(
+                    next.length == calendars.length ? null : next,
+                  );
+                },
+              ),
+          ],
+        );
+      },
     );
   }
 }

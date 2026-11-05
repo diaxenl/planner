@@ -81,20 +81,20 @@ Summarized; see git history for the full itemized checklists.
 - [ ] Add the confirmed package; add Android calendar read permission (and iOS usage description)
 - [x] `models/calendar_event.dart`: read-only (id, calendarId, title, start, end, isAllDay)
 - [x] `services/calendar_source.dart`: `CalendarSource` interface (`listCalendars()`, `eventsFor(date, calendarIds)`); `DeviceCalendarSource`; `NoCalendarSource` for desktop/web/tests
-- [ ] Request permission on first use with a plain explanation; handle denial gracefully (app works without calendars)
+- [x] Request permission with a plain explanation (Settings → Allow calendar access); handle denial gracefully (app works without calendars) — wired to `CalendarSource.requestAccess`, live once the device source exists
 - [x] `DayPlannerModel`: load events for the viewed date on load / refresh / day change; convert timed events to fixed Meeting blocks for the scheduler only (not persisted); skip declined events where exposed
 - [x] Overlap validation includes imported meetings
-- [ ] All-day events shown as a one-line label under the date header
-- [ ] Pull-to-refresh on the Day screen re-reads events
-- [ ] Settings: calendar picker (all selected by default) + note about syncing accounts to the phone
+- [x] All-day events shown as a one-line label under the date header
+- [x] Pull-to-refresh on the Day screen re-reads events
+- [x] Settings: calendar picker (all selected by default) + note about syncing accounts to the phone
 - [x] Tests: event → fixed-block conversion and overlap validation using a fake `CalendarSource`
 - [ ] Validation: on a real Android device with Google, Microsoft, and iCloud accounts synced
 
 ## Phase 15 — End-of-Day Review
 - [x] `day_stats.dart`: `timeSplit(tasks, schedule)` → planned vs actual minutes for Meetings / Outcomes / Other / Interruptions; `estimateAccuracy(tasks)` → % over/under (excludes cancelled and zero-tracked tasks); `outcomesHit(tasks)`
-- [ ] `features/review/review_screen.dart`: outcomes hit (e.g. 2 / 3), time split bars, accuracy line
-- [ ] Unfinished items list: each resolved via **Tomorrow** (`moveToDate`) or **Drop** (cancel)
-- [ ] Entry point from the Day screen (always available; emphasized after the last committed item ends)
+- [x] `features/review/review_screen.dart`: outcomes hit (e.g. 2 / 3), time split bars, accuracy line
+- [x] Unfinished items list: each resolved via **Tomorrow** (`moveToDate`) or **Drop** (cancel)
+- [x] Entry point from the Day screen (always available; emphasized after the last committed item ends)
 - [x] Tests: `timeSplit`, `estimateAccuracy`, `outcomesHit`
 - [ ] Validation: review a full simulated day end-to-end in the running app
 

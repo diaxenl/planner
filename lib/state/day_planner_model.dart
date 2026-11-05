@@ -358,6 +358,22 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
   /// appears in [tasks] and is never persisted).
   bool isImported(Task task) => task.id.startsWith(_importedPrefix);
 
+  /// Calendars available on the device (for the Settings picker).
+  Future<List<DeviceCalendarInfo>> listCalendars() async {
+    try {
+      return await _calendarSource.listCalendars();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Asks for calendar permission, then re-reads events if granted.
+  Future<bool> requestCalendarAccess() async {
+    final granted = await _calendarSource.requestAccess();
+    if (granted) await refreshCalendar();
+    return granted;
+  }
+
   /// Re-reads the viewed day's calendar events and replans. Surfaces a
   /// suggestion if a new or moved meeting displaces scheduled work.
   Future<void> refreshCalendar() async {

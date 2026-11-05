@@ -11,6 +11,7 @@ import '../../services/day_stats.dart';
 import '../../state/day_planner_model.dart';
 import '../../state/day_planner_provider.dart';
 import '../../state/settings_provider.dart';
+import '../review/review_screen.dart';
 import '../settings/settings_screen.dart';
 import 'widgets/agenda_list.dart';
 import 'widgets/capture_bar.dart';
@@ -85,65 +86,86 @@ class _DayScreenState extends State<DayScreen> {
                   model.viewedDate.add(const Duration(days: 1)),
                 ),
                 onToday: () => model.setViewedDate(DateTime.now()),
+                onReview: () => ReviewScreen.open(context),
                 onSettings: () => SettingsScreen.open(context),
               ),
+              if (model.allDayEvents.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'All day · ${model.allDayEvents.map((e) => e.title).join(' · ')}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                ),
               Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-                  children: [
-                    LoadBar(load: load, isToday: isToday),
-                    if (model.suggestion != null) ...[
-                      const SizedBox(height: 20),
-                      SuggestionBanner(
-                        suggestion: model.suggestion!,
-                        onAccept: model.acceptSuggestion,
-                        onDismiss: model.dismissSuggestion,
-                      ),
-                    ],
-                    if (isToday) ...[
-                      const SizedBox(height: 20),
-                      NowCard(
-                        item: current,
-                        hasAnyTasks: model.tasks.isNotEmpty,
-                        onStart: () => _act(ItemAction.start, current!.task),
-                        onDone: () => _act(ItemAction.done, current!.task),
-                        onCancel: () => _act(ItemAction.cancel, current!.task),
-                        onTap: () => _edit(model, current!.task),
-                      ),
-                    ],
-                    const SizedBox(height: 28),
-                    OutcomesList(
-                      tasks: model.tasks.where((t) => t.isOutcome).toList(),
-                      schedule: model.schedule,
-                      cap: model.outcomeCap,
-                      onDone: (t) => _act(ItemAction.done, t),
-                      onTap: (t) => _edit(model, t),
-                      onAdd: () => ItemSheet.show(
-                        context,
-                        model: model,
-                        draft: Task(
-                          title: '',
-                          durationMinutes: 60,
-                          type: TaskType.floating,
-                          isOutcome: true,
-                          date: model.viewedDate,
+                child: RefreshIndicator(
+                  onRefresh: model.refreshCalendar,
+                  child: ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                    children: [
+                      LoadBar(load: load, isToday: isToday),
+                      if (model.suggestion != null) ...[
+                        const SizedBox(height: 20),
+                        SuggestionBanner(
+                          suggestion: model.suggestion!,
+                          onAccept: model.acceptSuggestion,
+                          onDismiss: model.dismissSuggestion,
+                        ),
+                      ],
+                      if (isToday) ...[
+                        const SizedBox(height: 20),
+                        NowCard(
+                          item: current,
+                          hasAnyTasks: model.tasks.isNotEmpty,
+                          onStart: () => _act(ItemAction.start, current!.task),
+                          onDone: () => _act(ItemAction.done, current!.task),
+                          onCancel: () =>
+                              _act(ItemAction.cancel, current!.task),
+                          onTap: () => _edit(model, current!.task),
+                          onReview: () => ReviewScreen.open(context),
+                        ),
+                      ],
+                      const SizedBox(height: 28),
+                      OutcomesList(
+                        tasks: model.tasks.where((t) => t.isOutcome).toList(),
+                        schedule: model.schedule,
+                        cap: model.outcomeCap,
+                        onDone: (t) => _act(ItemAction.done, t),
+                        onTap: (t) => _edit(model, t),
+                        onAdd: () => ItemSheet.show(
+                          context,
+                          model: model,
+                          draft: Task(
+                            title: '',
+                            durationMinutes: 60,
+                            type: TaskType.floating,
+                            isOutcome: true,
+                            date: model.viewedDate,
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 28),
-                    AgendaList(
-                      schedule: model.schedule,
-                      tasks: model.tasks,
-                      currentTaskId: current?.task.id,
-                      onTap: (t) => _edit(model, t),
-                    ),
-                  ],
+                      const SizedBox(height: 28),
+                      AgendaList(
+                        schedule: model.schedule,
+                        tasks: model.tasks,
+                        currentTaskId: current?.task.id,
+                        onTap: (t) => _edit(model, t),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               CaptureBar(
                 onSubmit: (raw) => _capture(model, raw),
-                onSomethingCameUp:
-                    isToday ? () => _somethingCameUp(model) : null,
+                onSomethingCameUp: isToday
+                    ? () => _somethingCameUp(model)
+                    : null,
               ),
             ],
           ),
@@ -154,8 +176,11 @@ class _DayScreenState extends State<DayScreen> {
 
   /// Builds a task from capture shorthand: parsed duration (default 30m),
   /// a parsed time makes it Set-time, `*` makes it an Outcome.
-  Task _fromCapture(DayPlannerModel model, String raw,
-      {bool interruption = false}) {
+  Task _fromCapture(
+    DayPlannerModel model,
+    String raw, {
+    bool interruption = false,
+  }) {
     final p = CaptureParser.parse(raw);
     return Task(
       title: p.title.isEmpty ? raw.trim() : p.title,
@@ -245,11 +270,16 @@ class _DayScreenState extends State<DayScreen> {
         return;
       case ItemAction.done:
         model.markComplete(task.id, DateTime.now());
-        _snack('Done: "${task.title}"', undo: () => model.updateTask(task.id, task));
+        _snack(
+          'Done: "${task.title}"',
+          undo: () => model.updateTask(task.id, task),
+        );
       case ItemAction.cancel:
         model.cancelTask(task.id);
-        _snack('Cancelled "${task.title}"',
-            undo: () => model.updateTask(task.id, task));
+        _snack(
+          'Cancelled "${task.title}"',
+          undo: () => model.updateTask(task.id, task),
+        );
       case ItemAction.tomorrow:
         await model.moveToDate(
           task.id,
