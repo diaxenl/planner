@@ -200,28 +200,8 @@ class TaskCard extends StatelessWidget {
   }
 
   Widget _priorityBadge(BuildContext context) {
-    final (label, color) = switch (task.priority) {
-      Priority.high => ('H', Colors.red.shade400),
-      Priority.medium => ('M', Colors.orange.shade400),
-      Priority.low => ('L', Colors.green.shade400),
-    };
-
-    return Container(
-      width: 22,
-      height: 22,
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.bold,
-          color: color,
-        ),
-      ),
-    );
+    return task.isOutcome
+        ? Icon(Icons.star, size: 18, color: Colors.amber.shade600)
+        : const SizedBox(width: 18);
   }
 }

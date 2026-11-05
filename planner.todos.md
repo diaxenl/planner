@@ -25,24 +25,24 @@ Summarized; see git history for the full itemized checklists.
 ---
 
 ## Phase 10 — Model & Engine Simplification
-- [ ] Remove `Priority` enum and `Task.priority`
-- [ ] Add `Task.isOutcome` (`bool`, default `false`) and `Task.isInterruption` (`bool`, default `false`); update `copyWith`, `toJson`, `fromJson`
-- [ ] Scheduler: order floating tasks by `isOutcome` desc, then duration asc (replaces priority ordering)
-- [ ] `DayPlannerModel`: enforce max 3 outcomes per day on add/update (throw `ArgumentError` with a clear message)
-- [ ] `DayPlannerModel`: include `isOutcome` in `_scheduleFieldsChanged`
-- [ ] Remove automatic carry-forward from `setViewedDate` (replaced by explicit Tomorrow/Drop in Phase 15); keep `carriedFromDate`
-- [ ] Add `DayPlannerModel.moveToDate(id, date)` — removes the task from the current day and appends it (new date, same fields, `carriedFromDate` set) to the target day's file
-- [ ] Update existing tests for the removed priority; add tests for outcome ordering, outcome cap, `moveToDate`
-- [ ] Validation: analyze clean, tests green (UI may be temporarily broken where it referenced priority — fix minimally, it is deleted in Phase 11)
+- [x] Remove `Priority` enum and `Task.priority`
+- [x] Add `Task.isOutcome` (`bool`, default `false`) and `Task.isInterruption` (`bool`, default `false`); update `copyWith`, `toJson`, `fromJson`
+- [x] Scheduler: order floating tasks by `isOutcome` desc, then duration asc (replaces priority ordering)
+- [x] `DayPlannerModel`: enforce an outcome cap per day (`outcomeCap`, default 3) on add/update (throw `ArgumentError` with a clear message)
+- [x] `DayPlannerModel`: include `isOutcome` in `_scheduleFieldsChanged`
+- [x] Remove automatic carry-forward from `setViewedDate` (replaced by explicit Tomorrow/Drop in Phase 15); keep `carriedFromDate`
+- [x] Add `DayPlannerModel.moveToDate(id, date)` — removes the task from the current day and appends it (new date, same fields, `carriedFromDate` set) to the target day's file
+- [x] Update existing tests for the removed priority; add tests for outcome ordering, outcome cap, `moveToDate`
+- [x] Validation: analyze clean, tests green (UI may be temporarily broken where it referenced priority — fix minimally, it is deleted in Phase 11)
 
 ## Phase 11 — Design System & App Shell
 - [ ] Bundle one OFL font (e.g. Inter) under `assets/fonts/` and register it in `pubspec.yaml` `fonts:` (asset only — no package)
 - [ ] Rewrite `core/theme.dart`: dark + light `ThemeData` from tokens; one accent color; neutral surfaces; hairline dividers; no elevation; tabular-figure numeral style
-- [ ] Add `SettingsRepository` (`hyperday/settings.json`, atomic write) and `SettingsModel` (`themeMode`: dark default / light / system; `selectedCalendarIds`)
+- [ ] Add `SettingsRepository` (`hyperday/settings.json`, atomic write) and `SettingsModel` (`themeMode`: dark default / light / system; `outcomeCap`: default 3, range 1–5; `selectedCalendarIds`)
 - [ ] Wire `SettingsModel` into `main.dart` / `app.dart` (`themeMode`, dark default)
 - [ ] Delete `lib/features/day_view/` entirely
 - [ ] Create `features/day/day_screen.dart` skeleton: date header with prev/next, empty sections for load bar / Now / Outcomes / Agenda, bottom capture-bar placeholder
-- [ ] Create `features/settings/settings_screen.dart` with theme selector (calendar section added in Phase 14); reachable from Day header
+- [ ] Create `features/settings/settings_screen.dart` with theme selector and outcome cap (calendar section added in Phase 14); wire `outcomeCap` into `DayPlannerModel`; reachable from Day header
 - [ ] Replace widget smoke test with one for the new `DayScreen`
 - [ ] Validation: review dark and light themes in the running app
 
@@ -51,7 +51,7 @@ Summarized; see git history for the full itemized checklists.
 - [ ] `widgets/load_bar.dart`: single segmented bar from `loadBreakdown`, with a compact legend
 - [ ] `DayPlannerModel.currentItem` getter: in-progress task, else committed task whose window contains now, else next upcoming (pure function of schedule + now)
 - [ ] `widgets/now_card.dart`: title, large live timer (elapsed when in progress, "starts in" otherwise), Start / Done / Cancel gated by status rules; overrun state in accent warning color; hidden when not viewing today
-- [ ] `widgets/outcomes_list.dart`: up to 3 outcomes with check state; empty prompt "What would make today a win?"
+- [ ] `widgets/outcomes_list.dart`: outcomes up to the cap with check state; empty prompt "What would make today a win?"
 - [ ] `widgets/agenda_list.dart`: remaining committed items, one line each (time · title · duration); meetings visually muted; completed/cancelled shown muted/struck; overflow section at end with "Outcome doesn't fit today" callout when applicable
 - [ ] `widgets/suggestion_banner.dart`: restyled; same Accept/Dismiss wiring
 - [ ] `widgets/item_sheet.dart`: title, duration, kind (Meeting / At a set time / Anytime), time picker when needed, Outcome toggle; same validation rules; delete action
@@ -91,4 +91,4 @@ Summarized; see git history for the full itemized checklists.
 
 ---
 
-**Current status:** Engine (Phases 1–9) complete, including the 2026-11-05 Phase 9 fixes. Rebuild planned; **Phase 10 not started.**
+**Current status:** Engine (Phases 1–9) complete, including the 2026-11-05 Phase 9 fixes. Phase 10 complete. **Next: Phase 11.**

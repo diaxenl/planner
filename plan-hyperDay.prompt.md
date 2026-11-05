@@ -33,7 +33,7 @@ Every item has a title, a duration, and one of three kinds (plain-language label
 | **Anytime** | `floating` | Duration only. Scheduler places it. |
 
 Flags (no other categorization exists):
-- **Outcome** (`isOutcome`) — one of today's ≤ 3 most important things. Replaces the Low/Med/High priority system entirely.
+- **Outcome** (`isOutcome`) — one of today's most important things. Replaces the Low/Med/High priority system entirely. The daily cap defaults to **3** and is adjustable in Settings (1–5) — focus is the point, but the number is the individual's call.
 - **Interruption** (`isInterruption`) — set automatically when captured via "Something came up". Never set by hand.
 
 Status lifecycle is unchanged from Phase 8: `notStarted → inProgress → complete`, or `notStarted/inProgress → cancelled`.
@@ -59,7 +59,7 @@ Status lifecycle is unchanged from Phase 8: `notStarted → inProgress → compl
 1. **Day** (home). Shows today by default; prev/next to plan other days.
    - **Load bar** — signature element. One horizontal bar for the remaining day window, split into Meetings / Outcomes / Other / Free. Readable in half a second.
    - **Now card** (today only) — the current item (in-progress, else the one whose window contains now, else the next upcoming), big live timer, **Start / Done / Cancel**. Overrun turns the timer to the accent warning color.
-   - **Outcomes** — up to 3, with check state. If none are set: a single prompt, "What would make today a win?"
+   - **Outcomes** — up to the outcome cap, with check state. If none are set: a single prompt, "What would make today a win?"
    - **Agenda** — the rest of the day, one line per item: time · title · duration. Meetings visually quieter than work. Overflow at the end.
    - **Suggestion banner** — restyled; same Accept/Dismiss behavior.
    - **Capture bar** — pinned to the bottom, like a message composer. Replaces the FAB.
@@ -69,7 +69,7 @@ Status lifecycle is unchanged from Phase 8: `notStarted → inProgress → compl
    - Estimate accuracy: one number (e.g. "Ran 18% over estimates").
    - Unfinished items, each decided explicitly: **Tomorrow** or **Drop**. This replaces automatic carry-forward.
 3. **Item sheet** — bottom sheet to confirm/edit an item: title, duration, kind, time (if set), Outcome toggle.
-4. **Settings** — calendars to include, theme (Dark default / Light / System).
+4. **Settings** — calendars to include, theme (Dark default / Light / System), daily outcome cap (default 3).
 
 The old vertical hour-grid timeline is **removed**. The load bar plus agenda replace it.
 
@@ -132,7 +132,7 @@ No other packages may be added without explicit approval (see `AGENTS.md`).
 - **Duration:** required, integer, 5–480 minutes.
 - **Time:** start and end within the day window (6:00 AM – 11:00 PM).
 - **Overlap:** a Meeting or At-a-set-time item is rejected if it overlaps a Meeting (user-created or imported).
-- **Outcomes:** at most 3 per day. Marking a 4th is rejected with a clear message.
+- **Outcomes:** at most the user's outcome cap per day (default 3, Settings 1–5). Exceeding it is rejected with a clear message.
 - **Status transitions:** unchanged — Start only from `notStarted`; Done from `notStarted` (zero tracked time) or `inProgress`; Cancel from `notStarted` or `inProgress`.
 
 ---

@@ -17,11 +17,14 @@ import '../services/scheduler.dart';
 /// [notifyListeners].
 ///
 /// Also maintains a cached [DaySchedule] that is recomputed when
-/// schedule-affecting fields change (type, startTime, duration, priority,
+/// schedule-affecting fields change (type, startTime, duration, isOutcome,
 /// status, startedAt). Title-only edits skip the reschedule.
 ///
 /// Overlap validation: [addTask] and [updateTask] throw [ArgumentError]
 /// if a hard/pinned task's time range overlaps with an existing hard task.
+///
+/// Outcome cap: [addTask] and [updateTask] throw [ArgumentError] if the
+/// day would have more than [outcomeCap] Outcomes.
 ///
 /// Persistence: when a [DayRepository] is provided, the model loads tasks
 /// from storage on [loadDate] and saves them after every mutation with a
@@ -66,6 +69,9 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
   /// Released by the next user mutation, or when the hold falls into the
   /// past or collides with a fixed block (e.g. an overrunning task).
   final Map<String, TimeOfDay> _heldStarts = {};
+
+  /// Maximum number of Outcomes per day. Owned by settings; defaults to 3.
+  int outcomeCap = 3;
 
   bool _isLoading = false;
 
@@ -140,6 +146,7 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
   /// overlaps with an existing hard task.
   void addTask(Task task) {
     _validateOverlap(task);
+    _validateOutcomeCap(task);
     _tasks.add(task);
     _rescheduleAndDiff(excludeTaskId: task.id);
     _ensureOverrunMonitor();
@@ -169,6 +176,7 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     final index = _tasks.indexWhere((t) => t.id == id);
     if (index == -1) return;
     _validateOverlap(updated, excludeId: id);
+    _validateOutcomeCap(updated, excludeId: id);
 
     final old = _tasks[index];
     _tasks[index] = updated;
@@ -283,66 +291,43 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
 
   // ── Multi-day navigation ─────────────────────────────────────────────
 
-  /// Saves the current day (if dirty), switches to [newDate], and loads
-  /// its tasks. Incomplete non-hard tasks from the previous day that
-  /// have not already been carried to [newDate] are added as carry-forward
-  /// tasks.
+  /// Saves the current day, then switches to [newDate] and loads its tasks.
   Future<void> setViewedDate(DateTime newDate) async {
-    // Save the current day before switching.
     _saveTimer?.cancel();
     await _saveNow();
-
-    final previousDate = _viewedDate;
-    final previousTasks = List<Task>.of(_tasks);
-
-    // Load the new date from the repository.
     await loadDate(newDate);
+  }
 
-    // Carry forward: only when moving forward in time (next-day navigation).
-    // We carry incomplete, non-hard tasks that haven't been carried yet or
-    // that originated on the previous day.
-    final targetDate = _dateOnly(newDate);
-    final isForwardNavigation =
-        targetDate.isAfter(_dateOnly(previousDate));
+  /// Moves the task with [id] from the viewed day to [date], resetting it
+  /// to not started. It keeps its Outcome flag unless [date] is already at
+  /// the outcome cap. Pinned tasks become floating, since their time was
+  /// chosen for the original day. Without a repository the task is only
+  /// removed from the viewed day.
+  Future<void> moveToDate(String id, DateTime date) async {
+    final target = _dateOnly(date);
+    if (target == _viewedDate) return;
+    final index = _tasks.indexWhere((t) => t.id == id);
+    if (index == -1) return;
+    final task = _tasks[index];
+    removeTask(id);
 
-    if (isForwardNavigation) {
-      final alreadyCarriedIds = _tasks
-          .where((t) =>
-              t.carriedFromDate != null &&
-              _dateOnly(t.carriedFromDate!) == _dateOnly(previousDate))
-          .map((t) => t.id)
-          .toSet();
-
-      for (final old in previousTasks) {
-        if (old.status == TaskStatus.complete) continue;
-        if (old.status == TaskStatus.cancelled) continue;
-        if (old.type == TaskType.hard) continue;
-        if (alreadyCarriedIds.contains(old.id)) continue;
-
-        final carried = old.copyWith(
-          // New ID so the task is treated as a new entity on the new day.
-          id: null,
-          date: targetDate,
-          carriedFromDate: () => _dateOnly(previousDate),
-          // Pinned tasks become floating when carried to preserve scheduling
-          // flexibility; the user can re-pin if desired.
-          type: old.type == TaskType.pinned ? TaskType.floating : null,
-          startTime: old.type == TaskType.pinned ? () => null : null,
-        );
-        _tasks.add(carried);
-      }
-
-      if (previousTasks.any((t) =>
-          t.status != TaskStatus.complete &&
-          t.status != TaskStatus.cancelled &&
-          t.type != TaskType.hard &&
-          !alreadyCarriedIds.contains(t.id))) {
-        _reschedule();
-        _ensureOverrunMonitor();
-        await _saveNow();
-        notifyListeners();
-      }
-    }
+    if (_repository == null) return;
+    final targetTasks = await _repository.load(target);
+    final targetOutcomes = targetTasks
+        .where((t) => t.isOutcome && t.status != TaskStatus.cancelled)
+        .length;
+    final moved = task.copyWith(
+      date: target,
+      carriedFromDate: () => task.carriedFromDate ?? _viewedDate,
+      status: TaskStatus.notStarted,
+      startedAt: () => null,
+      completedAt: () => null,
+      actualDurationMinutes: () => null,
+      isOutcome: task.isOutcome && targetOutcomes < outcomeCap,
+      type: task.type == TaskType.pinned ? TaskType.floating : null,
+      startTime: task.type == TaskType.pinned ? () => null : null,
+    );
+    await _repository.save(target, [...targetTasks, moved]);
   }
 
   // ── Scheduling ──────────────────────────────────────────────────────
@@ -467,7 +452,7 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     return oldTask.type != newTask.type ||
         oldTask.startTime != newTask.startTime ||
         oldTask.durationMinutes != newTask.durationMinutes ||
-        oldTask.priority != newTask.priority ||
+        oldTask.isOutcome != newTask.isOutcome ||
         oldTask.status != newTask.status ||
         oldTask.startedAt != newTask.startedAt;
   }
@@ -605,6 +590,24 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
           '(${_fmtTime(existing.startTime!)}–${_fmtMinutes(existEnd)}).',
         );
       }
+    }
+  }
+
+  /// Throws [ArgumentError] if [task] is an Outcome and the day already
+  /// has [outcomeCap] active (non-cancelled) Outcomes besides [excludeId].
+  void _validateOutcomeCap(Task task, {String? excludeId}) {
+    if (!task.isOutcome) return;
+    final count = _tasks
+        .where((t) =>
+            t.id != excludeId &&
+            t.isOutcome &&
+            t.status != TaskStatus.cancelled)
+        .length;
+    if (count >= outcomeCap) {
+      throw ArgumentError(
+        'You already have $outcomeCap outcome${outcomeCap == 1 ? '' : 's'} '
+        'today. Finish or remove one first.',
+      );
     }
   }
 

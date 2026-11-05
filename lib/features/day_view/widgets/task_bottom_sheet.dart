@@ -52,7 +52,7 @@ class _TaskBottomSheetState extends State<TaskBottomSheet> {
   late TaskType _type;
   late TimeOfDay? _startTime;
   late TimeOfDay? _endTime;
-  late Priority _priority;
+  late bool _isOutcome;
 
   bool get _isEditing => widget.existingTask != null;
   bool get _isTimedType => _type != TaskType.floating;
@@ -95,7 +95,7 @@ class _TaskBottomSheetState extends State<TaskBottomSheet> {
     } else {
       _endTime = null;
     }
-    _priority = t?.priority ?? Priority.medium;
+    _isOutcome = t?.isOutcome ?? false;
   }
 
   @override
@@ -274,19 +274,12 @@ class _TaskBottomSheetState extends State<TaskBottomSheet> {
                 const SizedBox(height: AppConstants.paddingLarge),
               ],
 
-              // 5. Priority selector
-              Text('Priority', style: Theme.of(context).textTheme.bodyMedium),
-              const SizedBox(height: AppConstants.paddingSmall),
-              SegmentedButton<Priority>(
-                segments: const [
-                  ButtonSegment(value: Priority.low, label: Text('Low')),
-                  ButtonSegment(value: Priority.medium, label: Text('Medium')),
-                  ButtonSegment(value: Priority.high, label: Text('High')),
-                ],
-                selected: {_priority},
-                onSelectionChanged: (selected) {
-                  setState(() => _priority = selected.first);
-                },
+              // 5. Outcome toggle
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Outcome'),
+                value: _isOutcome,
+                onChanged: (v) => setState(() => _isOutcome = v),
               ),
               const SizedBox(height: AppConstants.paddingXLarge),
 
@@ -373,14 +366,14 @@ class _TaskBottomSheetState extends State<TaskBottomSheet> {
             durationMinutes: duration,
             type: _type,
             startTime: () => _startTime,
-            priority: _priority,
+            isOutcome: _isOutcome,
           )
         : Task(
             title: title,
             durationMinutes: duration,
             type: _type,
             startTime: _startTime,
-            priority: _priority,
+            isOutcome: _isOutcome,
             date: widget.date,
           );
 

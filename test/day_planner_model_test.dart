@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:planner/models/task.dart';
+import 'package:planner/services/day_repository.dart';
 import 'package:planner/state/day_planner_model.dart';
 
 /// Floating-task placement depends on the wall clock (tasks are never
@@ -10,12 +11,12 @@ import 'package:planner/state/day_planner_model.dart';
 final _tooLateForFloatingTests = TimeOfDay.now().hour >= 20;
 
 Task _floating(String title,
-        {int minutes = 30, Priority priority = Priority.medium}) =>
+        {int minutes = 30, bool outcome = false}) =>
     Task(
       title: title,
       durationMinutes: minutes,
       type: TaskType.floating,
-      priority: priority,
+      isOutcome: outcome,
       date: DateTime.now(),
     );
 
@@ -116,8 +117,8 @@ void main() {
     }, skip: _tooLateForFloatingTests);
 
     test('displacing an already-placed task surfaces a suggestion', () {
-      final low = _floating('Low', minutes: 60, priority: Priority.low);
-      final high = _floating('High', minutes: 60, priority: Priority.high);
+      final low = _floating('Low', minutes: 60);
+      final high = _floating('High', minutes: 60, outcome: true);
       model.addTask(low);
       model.addTask(high);
 
@@ -133,11 +134,11 @@ void main() {
     }, skip: _tooLateForFloatingTests);
 
     test('Dismiss keeps displaced tasks at their previous positions', () {
-      final low = _floating('Low', minutes: 60, priority: Priority.low);
+      final low = _floating('Low', minutes: 60);
       model.addTask(low);
       final before = _startOf(model, low);
 
-      model.addTask(_floating('High', minutes: 60, priority: Priority.high));
+      model.addTask(_floating('High', minutes: 60, outcome: true));
       expect(model.suggestion, isNotNull);
 
       model.dismissSuggestion();
@@ -151,12 +152,12 @@ void main() {
         (tester) async {
       final model = DayPlannerModel();
       final active = _floating('Active');
-      final low = _floating('Low', minutes: 60, priority: Priority.low);
+      final low = _floating('Low', minutes: 60);
       model
         ..addTask(active)
         ..startTask(active.id)
         ..addTask(low)
-        ..addTask(_floating('High', minutes: 60, priority: Priority.high));
+        ..addTask(_floating('High', minutes: 60, outcome: true));
       expect(model.suggestion, isNotNull);
 
       await tester.pump(const Duration(seconds: 31));
@@ -186,4 +187,125 @@ void main() {
       expect(back.actualDurationMinutes, 42);
     });
   });
+
+  group('Phase 10 — outcomes', () {
+    late DayPlannerModel model;
+    setUp(() => model = DayPlannerModel());
+    tearDown(() => model.dispose());
+
+    test('adding beyond the outcome cap is rejected', () {
+      for (var i = 0; i < 3; i++) {
+        model.addTask(_floating('O$i', outcome: true));
+      }
+      expect(() => model.addTask(_floating('O3', outcome: true)),
+          throwsArgumentError);
+      expect(model.tasks.length, 3);
+    });
+
+    test('the cap is configurable', () {
+      model.outcomeCap = 1;
+      model.addTask(_floating('O0', outcome: true));
+      expect(() => model.addTask(_floating('O1', outcome: true)),
+          throwsArgumentError);
+    });
+
+    test('cancelled outcomes free a slot; editing one does not self-count',
+        () {
+      model.outcomeCap = 1;
+      final first = _floating('O0', outcome: true);
+      model.addTask(first);
+      model.updateTask(first.id, first.copyWith(title: 'Renamed'));
+      model.cancelTask(first.id);
+      model.addTask(_floating('O1', outcome: true));
+      expect(model.tasks.where((t) => t.isOutcome).length, 2);
+    });
+
+    test('isOutcome / isInterruption round-trip; legacy priority ignored', () {
+      final t = _floating('A', outcome: true).copyWith(isInterruption: true);
+      final back = Task.fromJson(t.toJson())!;
+      expect(back.isOutcome, isTrue);
+      expect(back.isInterruption, isTrue);
+
+      final legacy = t.toJson()
+        ..remove('isOutcome')
+        ..remove('isInterruption')
+        ..['priority'] = 'high';
+      final old = Task.fromJson(legacy)!;
+      expect(old.isOutcome, isFalse);
+      expect(old.isInterruption, isFalse);
+    });
+  });
+
+  group('Phase 10 — moveToDate', () {
+    final today = DateTime(2026, 10, 10);
+    final tomorrow = DateTime(2026, 10, 11);
+    late _MemoryRepository repo;
+    late DayPlannerModel model;
+
+    setUp(() async {
+      repo = _MemoryRepository();
+      model = DayPlannerModel(initialDate: today, repository: repo);
+      await model.loadDate(today);
+    });
+    tearDown(() => model.dispose());
+
+    Task task(String title, {bool outcome = false}) => Task(
+          title: title,
+          durationMinutes: 30,
+          type: TaskType.pinned,
+          startTime: const TimeOfDay(hour: 22, minute: 0),
+          isOutcome: outcome,
+          date: today,
+        );
+
+    test('moves to the target day, reset and unpinned', () async {
+      final t = task('A');
+      model.addTask(t);
+      model.startTask(t.id);
+
+      await model.moveToDate(t.id, tomorrow);
+
+      expect(model.tasks, isEmpty);
+      final moved = (await repo.load(tomorrow)).single;
+      expect(moved.id, t.id);
+      expect(moved.date, tomorrow);
+      expect(moved.carriedFromDate, today);
+      expect(moved.status, TaskStatus.notStarted);
+      expect(moved.startedAt, isNull);
+      expect(moved.type, TaskType.floating);
+      expect(moved.startTime, isNull);
+    });
+
+    test('keeps Outcome unless the target day is full', () async {
+      model.outcomeCap = 1;
+      final a = task('A', outcome: true);
+      model.addTask(a);
+      await model.moveToDate(a.id, tomorrow);
+      expect((await repo.load(tomorrow)).single.isOutcome, isTrue);
+
+      final b = task('B', outcome: true);
+      model.addTask(b);
+      await model.moveToDate(b.id, tomorrow);
+      final bMoved =
+          (await repo.load(tomorrow)).firstWhere((t) => t.id == b.id);
+      expect(bMoved.isOutcome, isFalse);
+    });
+
+    test('day navigation no longer carries tasks forward', () async {
+      model.addTask(task('A'));
+      await model.setViewedDate(tomorrow);
+      expect(model.tasks, isEmpty);
+    });
+  });
+}
+
+class _MemoryRepository implements DayRepository {
+  final _days = <DateTime, List<Task>>{};
+
+  @override
+  Future<List<Task>> load(DateTime date) async => List.of(_days[date] ?? []);
+
+  @override
+  Future<void> save(DateTime date, List<Task> tasks) async =>
+      _days[date] = List.of(tasks);
 }

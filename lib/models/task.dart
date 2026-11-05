@@ -14,13 +14,6 @@ enum TaskType {
   floating,
 }
 
-/// Priority level for ordering floating tasks during scheduling.
-enum Priority {
-  low,
-  medium,
-  high,
-}
-
 /// Lifecycle status of a task.
 ///
 /// Valid transitions: `notStarted` → `inProgress` → `complete`, or
@@ -55,7 +48,8 @@ class Task {
     required this.durationMinutes,
     required this.type,
     this.startTime,
-    this.priority = Priority.medium,
+    this.isOutcome = false,
+    this.isInterruption = false,
     this.status = TaskStatus.notStarted,
     this.completedAt,
     this.startedAt,
@@ -80,8 +74,13 @@ class Task {
   /// `null` for [TaskType.floating].
   final TimeOfDay? startTime;
 
-  /// Scheduling priority — higher priority floating tasks are placed first.
-  final Priority priority;
+  /// Whether this task is one of the day's Outcomes — the few things that
+  /// make the day a win. Outcome floating tasks are scheduled first.
+  final bool isOutcome;
+
+  /// Whether this task was captured as an interruption ("Something came
+  /// up"). Set by the capture flow only, never by hand.
+  final bool isInterruption;
 
   /// Lifecycle status of the task. See [TaskStatus] for valid transitions.
   final TaskStatus status;
@@ -113,7 +112,8 @@ class Task {
     int? durationMinutes,
     TaskType? type,
     TimeOfDay? Function()? startTime,
-    Priority? priority,
+    bool? isOutcome,
+    bool? isInterruption,
     TaskStatus? status,
     DateTime? Function()? completedAt,
     DateTime? Function()? startedAt,
@@ -127,7 +127,8 @@ class Task {
       durationMinutes: durationMinutes ?? this.durationMinutes,
       type: type ?? this.type,
       startTime: startTime != null ? startTime() : this.startTime,
-      priority: priority ?? this.priority,
+      isOutcome: isOutcome ?? this.isOutcome,
+      isInterruption: isInterruption ?? this.isInterruption,
       status: status ?? this.status,
       completedAt: completedAt != null ? completedAt() : this.completedAt,
       startedAt: startedAt != null ? startedAt() : this.startedAt,
@@ -177,7 +178,8 @@ class Task {
       'startTime': startTime == null
           ? null
           : {'hour': startTime!.hour, 'minute': startTime!.minute},
-      'priority': priority.name,
+      'isOutcome': isOutcome,
+      'isInterruption': isInterruption,
       'status': status.name,
       'completedAt': completedAt?.toIso8601String(),
       'startedAt': startedAt?.toIso8601String(),
@@ -204,9 +206,8 @@ class Task {
               hour: startTimeMap['hour'] as int,
               minute: startTimeMap['minute'] as int,
             );
-      final priority = Priority.values.firstWhere(
-        (e) => e.name == json['priority'],
-      );
+      final isOutcome = json['isOutcome'] as bool? ?? false;
+      final isInterruption = json['isInterruption'] as bool? ?? false;
       final status = TaskStatus.values.firstWhere(
         (e) => e.name == json['status'],
       );
@@ -228,7 +229,8 @@ class Task {
         durationMinutes: durationMinutes,
         type: type,
         startTime: startTime,
-        priority: priority,
+        isOutcome: isOutcome,
+        isInterruption: isInterruption,
         status: status,
         completedAt: completedAt,
         startedAt: startedAt,

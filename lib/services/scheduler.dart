@@ -7,8 +7,8 @@ import '../models/task.dart';
 ///
 /// Given a list of tasks and a day window, produces a [DaySchedule]
 /// that places all hard/pinned tasks at their fixed positions and
-/// greedily fills remaining gaps with floating tasks sorted by
-/// priority (high → low) then duration (short → long).
+/// greedily fills remaining gaps with floating tasks — Outcomes first,
+/// then shorter duration first.
 class Scheduler {
   Scheduler._();
 
@@ -118,10 +118,9 @@ class Scheduler {
       gaps.add(_Gap(startMin: cursor, endMin: dayEndMin));
     }
 
-    // ── 4. Sort floating tasks: priority desc, then duration asc ──────
+    // ── 4. Sort floating tasks: Outcomes first, then duration asc ─────
     floatingTasks.sort((a, b) {
-      final priCmp = b.priority.index.compareTo(a.priority.index);
-      if (priCmp != 0) return priCmp;
+      if (a.isOutcome != b.isOutcome) return a.isOutcome ? -1 : 1;
       return a.durationMinutes.compareTo(b.durationMinutes);
     });
 
