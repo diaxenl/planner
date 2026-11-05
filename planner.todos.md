@@ -73,7 +73,13 @@ Summarized; see git history for the full itemized checklists.
 - [x] `widgets/capture_bar.dart`: pinned bottom text field; submit **adds directly** with an "Edit" snackbar (revised after persona review — confirmation sheet only opens if the model rejects the item)
 - [x] "Something came up" button beside the capture bar (today only) → enter text → choose **Now** (add + start immediately) / **Later today** (Anytime) / **Tomorrow** (`moveToDate`); sets `isInterruption = true`
 - [x] Tests: parser cases (each token alone, combined, none, edge cases like `1h30m`, `12pm`, `00:30` outside window)
-- [ ] Validation: persona review round 2 (rendered phone screenshots + code)
+- [x] Validation: persona review round 2 (rendered phone screenshots + code) → fixes below
+- [x] R2 fix: not-started items show "Ready · 30m" (no false countdown); planning "now" snaps to 5-minute steps
+- [x] R2 fix: clock-driven replans (minute tick, overrun) only report work pushed out of the day, OK-only (no Undo)
+- [x] R2 fix: starting a task pauses any other running task (tracked time discarded), with Undo
+- [x] R2 fix: Tomorrow has Undo and says when the Outcome flag was dropped
+- [x] R2 fix: Outcomes keep the order they were added (scheduler + list sorted by time)
+- [x] R2 fix: item sheet headline/wrapped actions; capture bar as bottom bar (snackbars above it, keeps focus); day-aware copy; compact header; brighter light accent; past-time capture warning
 
 ## Phase 14 — Calendar Import
 - [ ] **Prerequisite:** Android SDK installed and `flutter doctor` Android toolchain green

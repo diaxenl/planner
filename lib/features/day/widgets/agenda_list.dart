@@ -29,10 +29,12 @@ class AgendaList extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     final placedIds = schedule.committed.map((st) => st.task.id).toSet();
     final finishedOffPlan = tasks
-        .where((t) =>
-            !placedIds.contains(t.id) &&
-            (t.status == TaskStatus.complete ||
-                t.status == TaskStatus.cancelled))
+        .where(
+          (t) =>
+              !placedIds.contains(t.id) &&
+              (t.status == TaskStatus.complete ||
+                  t.status == TaskStatus.cancelled),
+        )
         .toList();
 
     return Column(

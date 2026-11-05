@@ -36,10 +36,10 @@ class AppTheme {
     textPrimary: Color(0xFF141517),
     textSecondary: Color(0xFF5F646B),
     textMuted: Color(0xFF9A9EA4),
-    accent: Color(0xFFB7791F),
+    accent: Color(0xFFC98512),
     onAccent: Color(0xFFFFFFFF),
-    meeting: Color(0xFFC9CCD1),
-    other: Color(0xFF7D838C),
+    meeting: Color(0xFFA2A7AF),
+    other: Color(0xFF5F656E),
   );
 
   static ThemeData get darkTheme => _build(_dark, Brightness.dark);
@@ -169,7 +169,7 @@ class AppTheme {
   static TextTheme _textTheme(HyperColors c) => TextTheme(
         // Live timer on the Now card.
         displayLarge: TextStyle(
-          fontSize: 56,
+          fontSize: 48,
           fontWeight: FontWeight.w700,
           letterSpacing: -2,
           height: 1.0,

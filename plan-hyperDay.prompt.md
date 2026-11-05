@@ -41,7 +41,9 @@ Status lifecycle is unchanged from Phase 8: `notStarted → inProgress → compl
 ### Scheduling (engine kept, ordering simplified)
 
 - Meetings, at-a-set-time items, and in-progress items are fixed blocks (unchanged).
-- Anytime items fill gaps from now onward: **Outcomes first**, then everything else; ties broken by shorter duration first. (Replaces priority ordering.)
+- Anytime items fill gaps from now onward: **Outcomes first, in the order the user added them** (revised after persona review — shortest-first pushed big Outcomes late), then everything else, shorter first. (Replaces priority ordering.)
+- **One thing at a time:** starting a task pauses any other running task back to not started (tracked time is discarded — KISS; Undo restores it).
+- Clock-driven replans (minute tick, overrun) apply moves silently and only raise an OK-only banner when work is pushed out of the day.
 - Anything that cannot fit goes to **overflow** — an unplaced Outcome is called out prominently ("Outcome doesn't fit today").
 - Adaptive replanning and overrun handling from Phase 9 are kept. Today's schedule also re-flows silently once a minute, so not-started work never sits in the past.
 - **The "Your day shifted" banner is rare by design** (revised after persona review): it appears only when an **Outcome moves later** or something is **pushed out of the day**. Everything else (other work reshuffling, things moving earlier) is applied silently. The change is already applied; the banner offers **OK** or **Undo** (Undo holds the affected work where it was).

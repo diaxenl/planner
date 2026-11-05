@@ -28,6 +28,19 @@ int _startOf(DayPlannerModel m, Task t) => m.schedule.committed
 
 Task _get(DayPlannerModel m, Task t) => m.tasks.firstWhere((x) => x.id == t.id);
 
+/// A 30-minute Meeting placed exactly where [t] is currently scheduled,
+/// which pushes [t] later.
+Task _meetingOn(DayPlannerModel m, Task t) {
+  final start = _startOf(m, t);
+  return Task(
+    title: 'Meeting',
+    durationMinutes: 30,
+    type: TaskType.hard,
+    startTime: TimeOfDay(hour: start ~/ 60, minute: start % 60),
+    date: DateTime.now(),
+  );
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -43,6 +56,20 @@ void main() {
 
       expect(_get(model, t).status, TaskStatus.inProgress);
       expect(_get(model, t).startedAt, isNotNull);
+    });
+
+    test('starting one task pauses whatever else was running', () {
+      final a = _floating('A');
+      final b = _floating('B');
+      model
+        ..addTask(a)
+        ..addTask(b)
+        ..startTask(a.id);
+      final paused = model.startTask(b.id);
+      expect(paused.map((t) => t.id), [a.id]);
+      expect(_get(model, a).status, TaskStatus.notStarted);
+      expect(_get(model, a).startedAt, isNull);
+      expect(_get(model, b).status, TaskStatus.inProgress);
     });
 
     test('startTask is a no-op unless notStarted', () {
@@ -120,9 +147,8 @@ void main() {
 
     test('pushing an Outcome later surfaces a suggestion', () {
       final low = _floating('Low', minutes: 60, outcome: true);
-      final high = _floating('High', minutes: 30, outcome: true);
       model.addTask(low);
-      model.addTask(high);
+      model.addTask(_meetingOn(model, low));
 
       expect(model.suggestion, isNotNull);
       expect(model.suggestion!.moves.map((m) => m.task.id), [low.id]);
@@ -161,11 +187,15 @@ void main() {
     }, skip: _tooLateForFloatingTests);
 
     test('Dismiss keeps displaced tasks at their previous positions', () {
+      final first = _floating('First', minutes: 30, outcome: true);
       final low = _floating('Low', minutes: 60, outcome: true);
-      model.addTask(low);
+      model
+        ..addTask(first)
+        ..addTask(low);
       final before = _startOf(model, low);
 
-      model.addTask(_floating('High', minutes: 30, outcome: true));
+      // Lengthening the first Outcome pushes the second one later.
+      model.updateTask(first.id, first.copyWith(durationMinutes: 90));
       expect(model.suggestion, isNotNull);
 
       model.dismissSuggestion();
@@ -179,12 +209,14 @@ void main() {
         (tester) async {
       final model = DayPlannerModel();
       final active = _floating('Active');
+      final first = _floating('First', minutes: 30, outcome: true);
       final low = _floating('Low', minutes: 60, outcome: true);
       model
         ..addTask(active)
         ..startTask(active.id)
+        ..addTask(first)
         ..addTask(low)
-        ..addTask(_floating('High', minutes: 30, outcome: true));
+        ..updateTask(first.id, first.copyWith(durationMinutes: 90));
       expect(model.suggestion, isNotNull);
 
       await tester.pump(const Duration(seconds: 31));
@@ -332,6 +364,16 @@ void main() {
       expect(_startOf(model, t), 6 * 60);
       expect(model.isViewingToday, isFalse);
       expect(model.currentItem, isNull);
+    });
+
+    test('undoMoveToDate brings the task back', () async {
+      final t = task('A', outcome: true);
+      model.addTask(t);
+      await model.moveToDate(t.id, tomorrow);
+      await model.undoMoveToDate(t, tomorrow);
+      expect(model.tasks.single.id, t.id);
+      expect(model.tasks.single.isOutcome, isTrue);
+      expect(await repo.load(tomorrow), isEmpty);
     });
 
     test('day navigation no longer carries tasks forward', () async {

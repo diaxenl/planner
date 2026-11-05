@@ -34,8 +34,10 @@ class SuggestionBanner extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('YOUR DAY SHIFTED',
-              style: text.labelSmall?.copyWith(color: colors.accent)),
+          Text(
+            'YOUR DAY SHIFTED',
+            style: text.labelSmall?.copyWith(color: colors.accent),
+          ),
           const SizedBox(height: 6),
           Text(suggestion.summary, style: text.bodyLarge),
           for (final t in suggestion.pushedOut)
@@ -51,8 +53,10 @@ class SuggestionBanner extends StatelessWidget {
                       style: text.bodyMedium,
                     ),
                   ),
-                  Text("Doesn't fit",
-                      style: text.bodySmall?.copyWith(color: colors.accent)),
+                  Text(
+                    "Doesn't fit",
+                    style: text.bodySmall?.copyWith(color: colors.accent),
+                  ),
                 ],
               ),
             ),
@@ -80,7 +84,8 @@ class SuggestionBanner extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              TextButton(onPressed: onDismiss, child: const Text('Undo')),
+              if (suggestion.canUndo)
+                TextButton(onPressed: onDismiss, child: const Text('Undo')),
               TextButton(
                 onPressed: onAccept,
                 style: TextButton.styleFrom(foregroundColor: colors.accent),

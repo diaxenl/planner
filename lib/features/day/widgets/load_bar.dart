@@ -7,10 +7,12 @@ import '../../../services/day_stats.dart';
 /// One segmented bar for the rest of the day: Meetings / Outcomes /
 /// Other / Free, with a one-line summary. Readable in half a second.
 class LoadBar extends StatelessWidget {
-  const LoadBar({super.key, required this.load, required this.isToday});
+  const LoadBar({super.key, required this.load, required this.dayLabel});
 
   final LoadBreakdown load;
-  final bool isToday;
+
+  /// "today", "tomorrow", or e.g. "on Friday".
+  final String dayLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +38,7 @@ class LoadBar extends StatelessWidget {
               ),
             ),
             Text(
-              isToday ? '  for the rest of today' : '  in this day',
+              dayLabel == 'today' ? '  for the rest of today' : '  $dayLabel',
               style: text.bodyMedium,
             ),
             const Spacer(),

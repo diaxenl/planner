@@ -109,13 +109,16 @@ class _ItemSheetState extends State<ItemSheet> {
       return _importedView(context, existing);
     }
 
-    final atCap = !_isOutcome &&
+    final atCap =
+        !_isOutcome &&
         !(existing?.isOutcome ?? false) &&
         widget.model.tasks
-                .where((t) =>
-                    t.id != existing?.id &&
-                    t.isOutcome &&
-                    t.status != TaskStatus.cancelled)
+                .where(
+                  (t) =>
+                      t.id != existing?.id &&
+                      t.isOutcome &&
+                      t.status != TaskStatus.cancelled,
+                )
                 .length >=
             widget.model.outcomeCap;
 
@@ -130,7 +133,12 @@ class _ItemSheetState extends State<ItemSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(_isEdit ? 'Edit' : 'New item', style: text.titleLarge),
+            Text(
+              existing?.title ?? 'New item',
+              style: text.titleLarge,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
             if (existing != null) _actions(context, existing),
             const SizedBox(height: 16),
             TextField(
@@ -147,8 +155,8 @@ class _ItemSheetState extends State<ItemSheet> {
             const SizedBox(height: 16),
             _label(context, 'HOW LONG'),
             Wrap(
-              spacing: 8,
-              runSpacing: 8,
+              spacing: 6,
+              runSpacing: 6,
               children: [
                 for (final m in _durationPresets)
                   _Choice(
@@ -185,16 +193,13 @@ class _ItemSheetState extends State<ItemSheet> {
               },
             ),
             const SizedBox(height: 6),
-            Text(
-              switch (_type) {
-                TaskType.floating => 'HyperDay finds the best free slot.',
-                TaskType.pinned =>
-                  'You pick the time. Nothing else can be booked over it.',
-                TaskType.hard =>
-                  'A fixed commitment. Never moved, nothing booked over it.',
-              },
-              style: text.bodyMedium,
-            ),
+            Text(switch (_type) {
+              TaskType.floating => 'HyperDay finds the best free slot.',
+              TaskType.pinned =>
+                'You pick the time. Nothing else can be booked over it.',
+              TaskType.hard =>
+                'A fixed commitment. Never moved, nothing booked over it.',
+            }, style: text.bodyMedium),
             if (needsTime) ...[
               const SizedBox(height: 8),
               OutlinedButton(
@@ -213,7 +218,7 @@ class _ItemSheetState extends State<ItemSheet> {
               subtitle: Text(
                 atCap
                     ? "You're at your limit of ${widget.model.outcomeCap}. "
-                        'Change it in Settings.'
+                          'Change it in Settings.'
                     : 'One of the few things that make the day a win',
                 style: text.bodyMedium,
               ),
@@ -222,8 +227,10 @@ class _ItemSheetState extends State<ItemSheet> {
             ),
             if (_error != null) ...[
               const SizedBox(height: 8),
-              Text(_error!,
-                  style: text.bodyMedium?.copyWith(color: colors.accent)),
+              Text(
+                _error!,
+                style: text.bodyMedium?.copyWith(color: colors.accent),
+              ),
             ],
             const SizedBox(height: 16),
             FilledButton(
@@ -253,29 +260,29 @@ class _ItemSheetState extends State<ItemSheet> {
     }
     final isMeeting = task.type == TaskType.hard;
 
-    Widget action(String label, ItemAction a) => Padding(
-          padding: const EdgeInsets.only(right: 8),
-          child: OutlinedButton(
-            onPressed: () {
-              Navigator.of(context).pop(true);
-              widget.onAction?.call(a, task);
-            },
-            child: Text(label),
-          ),
-        );
+    Widget action(String label, ItemAction a) => OutlinedButton(
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size(0, 40),
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+      ),
+      onPressed: () {
+        Navigator.of(context).pop(true);
+        widget.onAction?.call(a, task);
+      },
+      child: Text(label),
+    );
 
     return Padding(
       padding: const EdgeInsets.only(top: 12),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            if (notStarted && !isMeeting) action('Start', ItemAction.start),
-            if (!isMeeting) action('Done', ItemAction.done),
-            action('Cancel', ItemAction.cancel),
-            if (notStarted) action('Tomorrow', ItemAction.tomorrow),
-          ],
-        ),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          if (notStarted && !isMeeting) action('Start', ItemAction.start),
+          if (!isMeeting) action('Done', ItemAction.done),
+          action('Cancel', ItemAction.cancel),
+          if (notStarted) action('Tomorrow', ItemAction.tomorrow),
+        ],
       ),
     );
   }
@@ -307,16 +314,16 @@ class _ItemSheetState extends State<ItemSheet> {
   }
 
   Widget _label(BuildContext context, String label) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Text(label, style: Theme.of(context).textTheme.labelSmall),
-      );
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Text(label, style: Theme.of(context).textTheme.labelSmall),
+  );
 
   Future<void> _pickTime() async {
     final now = TimeOfDay.now();
     final picked = await showTimePicker(
       context: context,
-      initialTime: _startTime ??
-          TimeOfDay(hour: (now.hour + 1).clamp(0, 23), minute: 0),
+      initialTime:
+          _startTime ?? TimeOfDay(hour: (now.hour + 1).clamp(0, 23), minute: 0),
     );
     if (!mounted) return;
     if (picked != null) setState(() => _startTime = picked);
@@ -353,15 +360,17 @@ class _ItemSheetState extends State<ItemSheet> {
         );
       } else {
         final base = widget.draft;
-        model.addTask(Task(
-          title: title,
-          durationMinutes: _duration,
-          type: _type,
-          startTime: _startTime,
-          isOutcome: _isOutcome,
-          isInterruption: base?.isInterruption ?? false,
-          date: model.viewedDate,
-        ));
+        model.addTask(
+          Task(
+            title: title,
+            durationMinutes: _duration,
+            type: _type,
+            startTime: _startTime,
+            isOutcome: _isOutcome,
+            isInterruption: base?.isInterruption ?? false,
+            date: model.viewedDate,
+          ),
+        );
       }
     } on ArgumentError catch (e) {
       setState(() => _error = e.message.toString());
@@ -396,11 +405,13 @@ class _Choice extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
         decoration: BoxDecoration(
           color: selected ? colors.textPrimary : null,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: selected ? colors.textPrimary : colors.hairline),
+          border: Border.all(
+            color: selected ? colors.textPrimary : colors.hairline,
+          ),
         ),
         child: Text(
           label,

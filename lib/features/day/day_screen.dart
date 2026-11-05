@@ -62,6 +62,13 @@ class _DayScreenState extends State<DayScreen> {
     final current = model.currentItem;
     final now = DateTime.now();
 
+    final dayLabel = switch (AppUtils.relativeDayLabel(model.viewedDate, now)) {
+      'Today' => 'today',
+      'Tomorrow' => 'tomorrow',
+      'Yesterday' => 'yesterday',
+      final weekday => 'on $weekday',
+    };
+
     final load = DayStats.loadBreakdown(
       model.schedule,
       nowMinutes: isToday
@@ -109,7 +116,7 @@ class _DayScreenState extends State<DayScreen> {
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
                     children: [
-                      LoadBar(load: load, isToday: isToday),
+                      LoadBar(load: load, dayLabel: dayLabel),
                       if (model.suggestion != null) ...[
                         const SizedBox(height: 20),
                         SuggestionBanner(
@@ -136,6 +143,9 @@ class _DayScreenState extends State<DayScreen> {
                         tasks: model.tasks.where((t) => t.isOutcome).toList(),
                         schedule: model.schedule,
                         cap: model.outcomeCap,
+                        dayLabel: dayLabel.startsWith('on ')
+                            ? 'this day'
+                            : dayLabel,
                         onDone: (t) => _act(ItemAction.done, t),
                         onTap: (t) => _edit(model, t),
                         onAdd: () => ItemSheet.show(
@@ -161,13 +171,19 @@ class _DayScreenState extends State<DayScreen> {
                   ),
                 ),
               ),
-              CaptureBar(
-                onSubmit: (raw) => _capture(model, raw),
-                onSomethingCameUp: isToday
-                    ? () => _somethingCameUp(model)
-                    : null,
-              ),
             ],
+          ),
+        ),
+        bottomNavigationBar: SafeArea(
+          top: false,
+          child: Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom,
+            ),
+            child: CaptureBar(
+              onSubmit: (raw) => _capture(model, raw),
+              onSomethingCameUp: isToday ? () => _somethingCameUp(model) : null,
+            ),
           ),
         ),
       ),
@@ -203,8 +219,16 @@ class _DayScreenState extends State<DayScreen> {
       ItemSheet.show(context, model: model, draft: task);
       return;
     }
+    final now = TimeOfDay.now();
+    final inThePast =
+        model.isViewingToday &&
+        task.startTime != null &&
+        task.startTime!.hour * 60 + task.startTime!.minute <
+            now.hour * 60 + now.minute;
     _snack(
-      'Added "${task.title}" · ${_describe(task)}',
+      inThePast
+          ? 'Added "${task.title}" at a time that has already passed'
+          : 'Added "${task.title}" · ${_describe(task)}',
       actionLabel: 'Edit',
       onAction: () => _edit(model, task),
     );
@@ -229,7 +253,7 @@ class _DayScreenState extends State<DayScreen> {
     }
     switch (choice) {
       case InterruptionChoice.now:
-        model.startTask(task.id);
+        await _act(ItemAction.start, task);
       case InterruptionChoice.laterToday:
         _snack('Added "${task.title}" for later today');
       case InterruptionChoice.tomorrow:
@@ -266,8 +290,24 @@ class _DayScreenState extends State<DayScreen> {
     final model = DayPlannerProvider.of(context);
     switch (action) {
       case ItemAction.start:
-        model.startTask(task.id);
-        return;
+        final paused = model.startTask(task.id);
+        if (paused.isNotEmpty) {
+          _snack(
+            'Paused "${paused.first.title}"',
+            undo: () {
+              model.updateTask(
+                task.id,
+                task.copyWith(
+                  status: TaskStatus.notStarted,
+                  startedAt: () => null,
+                ),
+              );
+              for (final p in paused) {
+                model.updateTask(p.id, p);
+              }
+            },
+          );
+        }
       case ItemAction.done:
         model.markComplete(task.id, DateTime.now());
         _snack(
@@ -281,11 +321,20 @@ class _DayScreenState extends State<DayScreen> {
           undo: () => model.updateTask(task.id, task),
         );
       case ItemAction.tomorrow:
-        await model.moveToDate(
-          task.id,
-          model.viewedDate.add(const Duration(days: 1)),
+        final from = model.viewedDate;
+        final next = from.add(const Duration(days: 1));
+        final moved = await model.moveToDate(task.id, next);
+        final lostOutcome = task.isOutcome && moved != null && !moved.isOutcome;
+        _snack(
+          lostOutcome
+              ? 'Moved "${task.title}" to tomorrow — not as an Outcome, '
+                    'tomorrow is full'
+              : 'Moved "${task.title}" to tomorrow',
+          undo: () {
+            // Only meaningful while still on the day it came from.
+            if (model.viewedDate == from) model.undoMoveToDate(task, next);
+          },
         );
-        _snack('Moved "${task.title}" to tomorrow');
     }
   }
 

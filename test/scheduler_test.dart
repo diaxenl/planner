@@ -146,6 +146,28 @@ void main() {
       expect(_startOf(s, small), 10 * 60 + 30);
     });
 
+    test('Outcomes keep the order they were added, not shortest first', () {
+      final big = Task(
+        title: 'Big',
+        durationMinutes: 90,
+        type: TaskType.floating,
+        isOutcome: true,
+        date: _day,
+      );
+      final small = Task(
+        title: 'Small',
+        durationMinutes: 30,
+        type: TaskType.floating,
+        isOutcome: true,
+        date: _day,
+      );
+
+      final s = _run([big, small], nowMinutes: 9 * 60);
+
+      expect(_startOf(s, big), 9 * 60);
+      expect(_startOf(s, small), 10 * 60 + 30);
+    });
+
     test('without Outcomes, shorter work goes first', () {
       final long = Task(
         title: 'Long',

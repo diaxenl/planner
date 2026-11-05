@@ -202,10 +202,25 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
   /// Marks the task with [id] as [TaskStatus.inProgress] and starts its
   /// live time tracker (`startedAt = now`). No-op if the task is not
   /// currently [TaskStatus.notStarted].
-  void startTask(String id) {
+  ///
+  /// Only one thing is worked on at a time: any other in-progress task is
+  /// paused back to not started (its tracked time is discarded — KISS).
+  /// Returns the paused tasks as they were, so the caller can offer Undo.
+  List<Task> startTask(String id) {
     final index = _tasks.indexWhere((t) => t.id == id);
-    if (index == -1) return;
-    if (_tasks[index].status != TaskStatus.notStarted) return;
+    if (index == -1) return const [];
+    if (_tasks[index].status != TaskStatus.notStarted) return const [];
+
+    final paused = <Task>[];
+    for (var i = 0; i < _tasks.length; i++) {
+      final t = _tasks[i];
+      if (t.id == id || t.status != TaskStatus.inProgress) continue;
+      paused.add(t);
+      _tasks[i] = t.copyWith(
+        status: TaskStatus.notStarted,
+        startedAt: () => null,
+      );
+    }
 
     _tasks[index] = _tasks[index].copyWith(
       status: TaskStatus.inProgress,
@@ -215,6 +230,7 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     _ensureOverrunMonitor();
     _scheduleSave();
     notifyListeners();
+    return paused;
   }
 
   /// Marks the task with [id] as [TaskStatus.cancelled], freeing its slot.
@@ -311,15 +327,18 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
   /// the outcome cap. Pinned tasks become floating, since their time was
   /// chosen for the original day. Without a repository the task is only
   /// removed from the viewed day.
-  Future<void> moveToDate(String id, DateTime date) async {
+  ///
+  /// Returns the task as saved on [date] (check its Outcome flag), or
+  /// `null` if nothing was moved.
+  Future<Task?> moveToDate(String id, DateTime date) async {
     final target = _dateOnly(date);
-    if (target == _viewedDate) return;
+    if (target == _viewedDate) return null;
     final index = _tasks.indexWhere((t) => t.id == id);
-    if (index == -1) return;
+    if (index == -1) return null;
     final task = _tasks[index];
     removeTask(id);
 
-    if (_repository == null) return;
+    if (_repository == null) return null;
     final targetTasks = await _repository.load(target);
     final targetOutcomes = targetTasks
         .where((t) => t.isOutcome && t.status != TaskStatus.cancelled)
@@ -336,6 +355,21 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
       startTime: task.type == TaskType.pinned ? () => null : null,
     );
     await _repository.save(target, [...targetTasks, moved]);
+    return moved;
+  }
+
+  /// Undoes [moveToDate]: removes [original]'s copy from [date] and puts
+  /// [original] back on the viewed day.
+  Future<void> undoMoveToDate(Task original, DateTime date) async {
+    final target = _dateOnly(date);
+    if (_repository != null) {
+      final targetTasks = await _repository.load(target);
+      await _repository.save(
+        target,
+        targetTasks.where((t) => t.id != original.id).toList(),
+      );
+    }
+    addTask(original);
   }
 
   // ── Calendar ────────────────────────────────────────────────────────
@@ -458,21 +492,48 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     );
   }
 
-  /// The current time in minutes from midnight when viewing today;
-  /// `null` for any other day, so the whole day window is plannable.
+  /// The current time in minutes from midnight when viewing today,
+  /// floored to 5 minutes so planned times move in calm steps rather than
+  /// every minute; `null` for any other day, so the whole day window is
+  /// plannable.
   int? get _nowMinutesForViewedDay {
     final now = DateTime.now();
     if (_dateOnly(now) != _viewedDate) return null;
-    return now.hour * 60 + now.minute;
+    final minutes = now.hour * 60 + now.minute;
+    return minutes - minutes % 5;
   }
 
   /// Re-flows today's schedule as the clock moves, so not-started work
-  /// never sits in the past. Silent: no suggestion is raised, and a
-  /// pending one is left as is. No-op when not viewing today.
+  /// never sits in the past. Only work pushed out of the day is reported
+  /// (see [_replanForTime]). No-op when not viewing today.
   void tick() {
     if (!isViewingToday) return;
-    _reschedule();
+    _replanForTime();
     notifyListeners();
+  }
+
+  /// A replan caused by the clock (minute tick, overrun check) rather than
+  /// the user. Moves are applied silently; only work newly pushed out of
+  /// the day raises a suggestion, which can't be undone (time can't be
+  /// given back), so it offers OK only. A pending user suggestion is kept.
+  void _replanForTime() {
+    if (_suggestion != null) {
+      _reschedule();
+      return;
+    }
+    final before = _schedule;
+    _reschedule();
+    final candidate = _buildSuggestion(before, _schedule);
+    final pushedOut = candidate.pushedOut;
+    if (pushedOut.isNotEmpty) {
+      _suggestion = ScheduleSuggestion(
+        proposed: _schedule,
+        moves: const [],
+        pushedOut: pushedOut,
+        canUndo: false,
+      );
+      _suggestionBase = before;
+    }
   }
 
   /// Whether the viewed day is today.
@@ -481,9 +542,9 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
   /// What to show on the Now card: see [DayStats.currentItem]. Always
   /// `null` when not viewing today.
   ScheduledTask? get currentItem {
-    final nowMinutes = _nowMinutesForViewedDay;
-    if (nowMinutes == null) return null;
-    return DayStats.currentItem(_schedule, nowMinutes);
+    if (!isViewingToday) return null;
+    final now = DateTime.now();
+    return DayStats.currentItem(_schedule, now.hour * 60 + now.minute);
   }
 
   /// Drops holds that no longer make sense: the task is gone, no longer a
@@ -595,7 +656,7 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
   /// overrunning its estimate is reflected in downstream placement,
   /// surfacing a suggestion if the recompute displaces other tasks.
   void _checkOverrun() {
-    _rescheduleAndDiff(releaseHolds: false);
+    _replanForTime();
     notifyListeners();
   }
 

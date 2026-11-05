@@ -74,9 +74,7 @@ class _NowCardState extends State<NowCard> {
             Text('NOW', style: text.labelSmall),
             const SizedBox(height: 8),
             Text(
-              widget.hasAnyTasks
-                  ? 'Nothing left on the plan.'
-                  : 'A clear day.',
+              widget.hasAnyTasks ? 'Nothing left on the plan.' : 'A clear day.',
               style: text.titleLarge,
             ),
             const SizedBox(height: 4),
@@ -118,22 +116,31 @@ class _NowCardState extends State<NowCard> {
       timer = AppUtils.formatTimer(elapsed);
       if (over > 0) {
         timerColor = colors.accent;
-        detail = '+${AppUtils.formatDuration(over)} over your '
+        detail =
+            '+${AppUtils.formatDuration(over)} over your '
             '${AppUtils.formatDuration(task.durationMinutes)} estimate';
       } else {
         detail = 'of ${AppUtils.formatDuration(task.durationMinutes)}';
       }
     } else if (nowSeconds < startSeconds) {
       label = isMeeting ? 'NEXT MEETING' : 'UP NEXT';
-      timer = AppUtils.formatTimer(Duration(seconds: startSeconds - nowSeconds));
-      detail = 'until ${AppUtils.formatClock(item.startMinutes)}'
+      timer = AppUtils.formatTimer(
+        Duration(seconds: startSeconds - nowSeconds),
+      );
+      detail =
+          'until ${AppUtils.formatClock(item.startMinutes)}'
           ' · ${AppUtils.formatDuration(task.durationMinutes)}';
-    } else {
-      label = isMeeting ? 'IN A MEETING' : 'SCHEDULED NOW';
+    } else if (isMeeting) {
+      label = 'IN A MEETING';
       timer = AppUtils.formatTimer(
         Duration(seconds: (endSeconds - nowSeconds).clamp(0, endSeconds)),
       );
       detail = 'left · until ${AppUtils.formatClock(item.endMinutes)}';
+    } else {
+      // Planned for now but not started: nothing is ticking yet.
+      label = 'READY';
+      timer = AppUtils.formatDuration(task.durationMinutes);
+      detail = 'planned now · tap Start when you begin';
     }
 
     return GestureDetector(
@@ -224,7 +231,9 @@ class _Shell extends StatelessWidget {
         color: colors.surface,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: accent ? colors.accent.withValues(alpha: 0.35) : colors.hairline,
+          color: accent
+              ? colors.accent.withValues(alpha: 0.35)
+              : colors.hairline,
         ),
       ),
       child: child,

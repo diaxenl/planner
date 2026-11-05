@@ -7,11 +7,7 @@ import '../../../core/theme.dart';
 /// When [onSomethingCameUp] is set (today only), a bolt button opens the
 /// interruption flow.
 class CaptureBar extends StatefulWidget {
-  const CaptureBar({
-    super.key,
-    required this.onSubmit,
-    this.onSomethingCameUp,
-  });
+  const CaptureBar({super.key, required this.onSubmit, this.onSomethingCameUp});
 
   final ValueChanged<String> onSubmit;
   final VoidCallback? onSomethingCameUp;
@@ -22,17 +18,21 @@ class CaptureBar extends StatefulWidget {
 
 class _CaptureBarState extends State<CaptureBar> {
   final _controller = TextEditingController();
+  final _focus = FocusNode();
 
   @override
   void dispose() {
     _controller.dispose();
+    _focus.dispose();
     super.dispose();
   }
 
+  /// Keeps the keyboard up so several things can be captured in a row.
   void _submit() {
     final raw = _controller.text;
     if (raw.trim().isEmpty) return;
     _controller.clear();
+    _focus.requestFocus();
     widget.onSubmit(raw);
   }
 
@@ -54,11 +54,12 @@ class _CaptureBarState extends State<CaptureBar> {
               icon: Icon(Icons.bolt, color: colors.accent),
             )
           else
-            const SizedBox(width: 8),
+            const SizedBox(width: 48),
           Expanded(
             child: TextField(
               controller: _controller,
-              textInputAction: TextInputAction.done,
+              focusNode: _focus,
+              textInputAction: TextInputAction.send,
               textCapitalization: TextCapitalization.sentences,
               onSubmitted: (_) => _submit(),
               decoration: InputDecoration(

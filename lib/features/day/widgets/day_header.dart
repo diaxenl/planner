@@ -48,9 +48,14 @@ class DayHeader extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${AppUtils.weekdayName(date.weekday)}, '
-                    '${AppUtils.monthName(date.month)} ${date.day}'
-                    '${isToday ? '' : '  ·  Back to today'}',
+                    isToday
+                        ? '${AppUtils.weekdayName(date.weekday)}, '
+                              '${AppUtils.monthName(date.month)} ${date.day}'
+                        : '${AppUtils.weekdayName(date.weekday).substring(0, 3)}, '
+                              '${AppUtils.monthName(date.month).substring(0, 3)} '
+                              '${date.day} · Back to today',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: text.bodyMedium?.copyWith(
                       color: isToday ? colors.textSecondary : colors.accent,
                     ),
@@ -60,21 +65,25 @@ class DayHeader extends StatelessWidget {
             ),
           ),
           IconButton(
+            visualDensity: VisualDensity.compact,
             tooltip: 'Previous day',
             onPressed: onPreviousDay,
             icon: const Icon(Icons.chevron_left),
           ),
           IconButton(
+            visualDensity: VisualDensity.compact,
             tooltip: 'Next day',
             onPressed: onNextDay,
             icon: const Icon(Icons.chevron_right),
           ),
           IconButton(
+            visualDensity: VisualDensity.compact,
             tooltip: 'Review',
             onPressed: onReview,
             icon: const Icon(Icons.insights, size: 20),
           ),
           IconButton(
+            visualDensity: VisualDensity.compact,
             tooltip: 'Settings',
             onPressed: onSettings,
             icon: const Icon(Icons.tune, size: 20),

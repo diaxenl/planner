@@ -16,6 +16,7 @@ class OutcomesList extends StatelessWidget {
     required this.onDone,
     required this.onTap,
     required this.onAdd,
+    required this.dayLabel,
   });
 
   /// Every Outcome on the day, any status.
@@ -26,12 +27,16 @@ class OutcomesList extends StatelessWidget {
   final ValueChanged<Task> onTap;
   final VoidCallback onAdd;
 
+  /// "today", "tomorrow", or "this day" — for the empty prompt.
+  final String dayLabel;
+
   @override
   Widget build(BuildContext context) {
     final colors = HyperColors.of(context);
     final text = Theme.of(context).textTheme;
     final active = tasks.where((t) => t.status != TaskStatus.cancelled);
     final done = active.where((t) => t.status == TaskStatus.complete).length;
+    final ordered = _ordered();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -49,9 +54,9 @@ class OutcomesList extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         if (tasks.isEmpty)
-          _AddRow(label: 'What would make today a win?', onTap: onAdd)
+          _AddRow(label: 'What would make $dayLabel a win?', onTap: onAdd)
         else ...[
-          for (final t in tasks) _row(context, t),
+          for (final t in ordered) _row(context, t),
           if (active.length < cap)
             _AddRow(label: 'Add an outcome', onTap: onAdd),
         ],
@@ -59,27 +64,45 @@ class OutcomesList extends StatelessWidget {
     );
   }
 
+  /// Next up first: scheduled by start time, then ones that don't fit,
+  /// then finished ones.
+  List<Task> _ordered() {
+    int rank(Task t) {
+      if (t.status == TaskStatus.complete || t.status == TaskStatus.cancelled) {
+        return 1 << 20;
+      }
+      final placed = schedule.committed
+          .where((st) => st.task.id == t.id)
+          .firstOrNull;
+      return placed?.startMinutes ?? (1 << 19);
+    }
+
+    return [...tasks]..sort((a, b) => rank(a).compareTo(rank(b)));
+  }
+
   Widget _row(BuildContext context, Task task) {
     final colors = HyperColors.of(context);
     final text = Theme.of(context).textTheme;
     final isDone = task.status == TaskStatus.complete;
     final isCancelled = task.status == TaskStatus.cancelled;
-    final placed =
-        schedule.committed.where((st) => st.task.id == task.id).firstOrNull;
+    final placed = schedule.committed
+        .where((st) => st.task.id == task.id)
+        .firstOrNull;
     final overflowing = schedule.overflow.any((t) => t.id == task.id);
 
     final String when;
     if (isCancelled) {
       when = 'Cancelled';
     } else if (isDone) {
-      when = task.actualDurationMinutes != null &&
-              task.actualDurationMinutes! > 0
+      when =
+          task.actualDurationMinutes != null && task.actualDurationMinutes! > 0
           ? 'Done · took ${AppUtils.formatDuration(task.actualDurationMinutes!)}'
           : 'Done';
     } else if (overflowing) {
       when = "Doesn't fit — shorten it or move it to tomorrow";
     } else if (placed != null) {
-      when = '${AppUtils.formatClock(placed.startMinutes)}'
+      when =
+          '${AppUtils.formatClock(placed.startMinutes)}'
           ' · ${AppUtils.formatDuration(task.durationMinutes)}';
     } else {
       when = AppUtils.formatDuration(task.durationMinutes);
@@ -121,8 +144,9 @@ class OutcomesList extends StatelessWidget {
                     task.title,
                     style: text.titleMedium?.copyWith(
                       color: isDone || isCancelled ? colors.textMuted : null,
-                      decoration:
-                          isCancelled ? TextDecoration.lineThrough : null,
+                      decoration: isCancelled
+                          ? TextDecoration.lineThrough
+                          : null,
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -170,7 +194,10 @@ class _AddRow extends StatelessWidget {
                 child: Icon(Icons.add, size: 14, color: colors.textMuted),
               ),
             ),
-            Text(label, style: text.bodyLarge?.copyWith(color: colors.textMuted)),
+            Text(
+              label,
+              style: text.bodyLarge?.copyWith(color: colors.textMuted),
+            ),
           ],
         ),
       ),

@@ -29,6 +29,7 @@ class ScheduleSuggestion {
     required this.proposed,
     required this.moves,
     this.pushedOut = const [],
+    this.canUndo = true,
   });
 
   /// The schedule now in effect.
@@ -39,6 +40,10 @@ class ScheduleSuggestion {
 
   /// Tasks that no longer fit in the day.
   final List<Task> pushedOut;
+
+  /// Whether Undo is meaningful. False for replans caused by the clock
+  /// (an overrun or time passing), which can't be given back.
+  final bool canUndo;
 
   /// Whether this suggestion actually reports anything.
   bool get hasChanges => moves.isNotEmpty || pushedOut.isNotEmpty;
