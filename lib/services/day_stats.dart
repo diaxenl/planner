@@ -89,9 +89,10 @@ class DayStats {
     );
   }
 
-  /// The item to focus on at [nowMinutes]: the in-progress item if any,
-  /// else the not-started item whose window contains now, else the next
-  /// upcoming not-started item. `null` if nothing is left today.
+  /// The item to focus on at [nowMinutes]: the most recently started
+  /// in-progress item if any, else the not-started item whose window
+  /// contains now, else the next upcoming not-started item. `null` if
+  /// nothing is left today.
   static ScheduledTask? currentItem(DaySchedule schedule, int nowMinutes) {
     final active = schedule.committed.where(
       (st) =>
@@ -99,9 +100,16 @@ class DayStats {
           st.task.status == TaskStatus.inProgress,
     );
 
+    ScheduledTask? latest;
     for (final st in active) {
-      if (st.task.status == TaskStatus.inProgress) return st;
+      if (st.task.status != TaskStatus.inProgress) continue;
+      final started = st.task.startedAt;
+      if (latest == null ||
+          (started != null && started.isAfter(latest.task.startedAt!))) {
+        latest = st;
+      }
     }
+    if (latest != null) return latest;
     for (final st in active) {
       if (st.startMinutes <= nowMinutes && nowMinutes < st.endMinutes) {
         return st;

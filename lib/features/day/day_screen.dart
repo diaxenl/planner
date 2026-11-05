@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/constants.dart';
+import '../../core/utils.dart';
 import '../../models/task.dart';
+import '../../services/capture_parser.dart';
 import '../../services/day_stats.dart';
 import '../../state/day_planner_model.dart';
 import '../../state/day_planner_provider.dart';
@@ -13,6 +15,7 @@ import '../settings/settings_screen.dart';
 import 'widgets/agenda_list.dart';
 import 'widgets/capture_bar.dart';
 import 'widgets/day_header.dart';
+import 'widgets/interruption_sheet.dart';
 import 'widgets/item_sheet.dart';
 import 'widgets/load_bar.dart';
 import 'widgets/now_card.dart';
@@ -138,25 +141,85 @@ class _DayScreenState extends State<DayScreen> {
                 ),
               ),
               CaptureBar(
-                onSubmit: (raw) {
-                  final title = raw.trim();
-                  ItemSheet.show(
-                    context,
-                    model: model,
-                    draft: Task(
-                      title: title,
-                      durationMinutes: 30,
-                      type: TaskType.floating,
-                      date: model.viewedDate,
-                    ),
-                  );
-                },
+                onSubmit: (raw) => _capture(model, raw),
+                onSomethingCameUp:
+                    isToday ? () => _somethingCameUp(model) : null,
               ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  /// Builds a task from capture shorthand: parsed duration (default 30m),
+  /// a parsed time makes it Set-time, `*` makes it an Outcome.
+  Task _fromCapture(DayPlannerModel model, String raw,
+      {bool interruption = false}) {
+    final p = CaptureParser.parse(raw);
+    return Task(
+      title: p.title.isEmpty ? raw.trim() : p.title,
+      durationMinutes: p.durationMinutes ?? 30,
+      type: p.startTime != null ? TaskType.pinned : TaskType.floating,
+      startTime: p.startTime,
+      isOutcome: p.isOutcome,
+      isInterruption: interruption,
+      date: model.viewedDate,
+    );
+  }
+
+  /// Adds straight away and confirms with an Edit shortcut; if the model
+  /// rejects it (overlap, cap, out of range), opens the sheet to fix it.
+  void _capture(DayPlannerModel model, String raw) {
+    final task = _fromCapture(model, raw);
+    try {
+      model.addTask(task);
+    } on ArgumentError {
+      ItemSheet.show(context, model: model, draft: task);
+      return;
+    }
+    _snack(
+      'Added "${task.title}" · ${_describe(task)}',
+      actionLabel: 'Edit',
+      onAction: () => _edit(model, task),
+    );
+  }
+
+  Future<void> _somethingCameUp(DayPlannerModel model) async {
+    final result = await InterruptionSheet.show(context);
+    if (result == null || !mounted) return;
+    final (raw, choice) = result;
+    final parsed = _fromCapture(model, raw, interruption: true);
+    // An interruption isn't planned for a time; "Later today" lets the
+    // scheduler place it.
+    final task = parsed.copyWith(
+      type: TaskType.floating,
+      startTime: () => null,
+    );
+    try {
+      model.addTask(task);
+    } on ArgumentError {
+      ItemSheet.show(context, model: model, draft: task);
+      return;
+    }
+    switch (choice) {
+      case InterruptionChoice.now:
+        model.startTask(task.id);
+      case InterruptionChoice.laterToday:
+        _snack('Added "${task.title}" for later today');
+      case InterruptionChoice.tomorrow:
+        await _act(ItemAction.tomorrow, task);
+    }
+  }
+
+  static String _describe(Task t) {
+    final parts = <String>[
+      AppUtils.formatDuration(t.durationMinutes),
+      if (t.startTime != null)
+        'at ${AppUtils.formatClock(t.startTime!.hour * 60 + t.startTime!.minute)}',
+      if (t.isOutcome) 'Outcome',
+    ];
+    return parts.join(' · ');
   }
 
   void _edit(DayPlannerModel model, Task task) {
@@ -196,21 +259,27 @@ class _DayScreenState extends State<DayScreen> {
     }
   }
 
-  void _snack(String message, {VoidCallback? undo}) {
+  void _snack(
+    String message, {
+    VoidCallback? undo,
+    String? actionLabel,
+    VoidCallback? onAction,
+  }) {
     if (!mounted) return;
     final messenger = ScaffoldMessenger.of(context);
+    final action = undo ?? onAction;
     messenger
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
           content: Text(message),
-          action: undo == null
+          action: action == null
               ? null
               : SnackBarAction(
-                  label: 'Undo',
+                  label: undo != null ? 'Undo' : actionLabel!,
                   onPressed: () {
                     try {
-                      undo();
+                      action();
                     } on ArgumentError catch (e) {
                       messenger.showSnackBar(
                         SnackBar(content: Text("Couldn't undo: ${e.message}")),

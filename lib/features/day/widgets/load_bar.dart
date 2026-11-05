@@ -53,14 +53,14 @@ class LoadBar extends StatelessWidget {
           child: SizedBox(
             height: 8,
             child: segments.isEmpty
-                ? ColoredBox(color: colors.hairline)
+                ? Container(color: colors.hairline)
                 : Row(
                     children: [
                       for (var i = 0; i < segments.length; i++) ...[
                         if (i > 0) const SizedBox(width: 2),
                         Expanded(
                           flex: segments[i].$1,
-                          child: ColoredBox(color: segments[i].$2),
+                          child: Container(color: segments[i].$2),
                         ),
                       ],
                     ],

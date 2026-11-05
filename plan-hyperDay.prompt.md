@@ -81,8 +81,8 @@ The old vertical hour-grid timeline is **removed**. The load bar plus agenda rep
   - Time: `3pm`, `15:00` → At a set time
   - Outcome: `*` anywhere marks it as an Outcome
   - Everything else is the title
-  - The draft always opens in the Item sheet for confirmation — nothing is saved from a misparse.
-- **"Something came up"** button next to the capture bar: type it, then pick **Now** (start it immediately, replanning the day) / **Later today** (Anytime) / **Tomorrow**. Marks the item as an Interruption.
+  - The item is **added immediately** with an "Added … · Edit" confirmation (revised after persona review: the extra confirm step was friction). If the model rejects it (overlap, cap, outside the day), the Item sheet opens pre-filled to fix it.
+- **"Something came up"** button next to the capture bar: type it, then pick **Now** (start it immediately, replanning the day) / **Later today** (Anytime) / **Tomorrow**. Marks the item as an Interruption. Shown when viewing today. The Now card always shows the most recently started item.
 
 ### Visual identity
 

@@ -45,4 +45,22 @@ void main() {
 
     model.dispose();
   });
+
+  testWidgets('capture shorthand adds the item directly', (tester) async {
+    final model = DayPlannerModel();
+    final settings = SettingsModel();
+    await tester.pumpWidget(_app(model, settings));
+
+    await tester.enterText(find.byType(TextField), 'Call Bob 20m *');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+
+    final added = model.tasks.single;
+    expect(added.title, 'Call Bob');
+    expect(added.durationMinutes, 20);
+    expect(added.isOutcome, isTrue);
+    expect(find.textContaining('Added "Call Bob"'), findsOneWidget);
+
+    model.dispose();
+  }, skip: TimeOfDay.now().hour >= 22);
 }

@@ -61,7 +61,8 @@ class AppTheme {
       outlineVariant: c.hairline,
     );
 
-    final text = _textTheme(c);
+    // Apply Inter to every role, including ones used by buttons.
+    final text = _textTheme(c).apply(fontFamily: fontFamily);
 
     return ThemeData(
       useMaterial3: true,

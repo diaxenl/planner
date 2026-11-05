@@ -70,10 +70,10 @@ Summarized; see git history for the full itemized checklists.
 
 ## Phase 13 — Capture & Triage
 - [x] `services/capture_parser.dart`: parse duration (`30m`, `1h`, `1h30m`; default 30m), time (`3pm`, `15:00` → At a set time), `*` → Outcome; remainder is the title
-- [ ] `widgets/capture_bar.dart`: pinned bottom text field; submit opens `item_sheet` pre-filled with the parsed draft (never saves directly)
-- [ ] "Something came up" button beside the capture bar → enter text → choose **Now** (add + start immediately) / **Later today** (Anytime) / **Tomorrow** (`moveToDate`); sets `isInterruption = true`
+- [x] `widgets/capture_bar.dart`: pinned bottom text field; submit **adds directly** with an "Edit" snackbar (revised after persona review — confirmation sheet only opens if the model rejects the item)
+- [x] "Something came up" button beside the capture bar (today only) → enter text → choose **Now** (add + start immediately) / **Later today** (Anytime) / **Tomorrow** (`moveToDate`); sets `isInterruption = true`
 - [x] Tests: parser cases (each token alone, combined, none, edge cases like `1h30m`, `12pm`, `00:30` outside window)
-- [ ] Validation: review capture + interruption flows in the running app
+- [ ] Validation: persona review round 2 (rendered phone screenshots + code)
 
 ## Phase 14 — Calendar Import
 - [ ] **Prerequisite:** Android SDK installed and `flutter doctor` Android toolchain green
