@@ -6,24 +6,11 @@ class AppConstants {
   AppConstants._();
 
   // ── Day window ──────────────────────────────────────────────────────
-  /// Earliest hour shown on the timeline (inclusive).
+  /// Start of the plannable day window (inclusive).
   static const int dayStartHour = 6;
 
-  /// Latest hour shown on the timeline (inclusive end label).
+  /// End of the plannable day window (exclusive).
   static const int dayEndHour = 23; // 11 PM
-
-  /// Total number of hour slots rendered on the timeline.
-  static int get totalHours => dayEndHour - dayStartHour; // 17
-
-  // ── Timeline dimensions ─────────────────────────────────────────────
-  /// Fixed pixel height for one hour on the timeline.
-  static const double hourHeight = 80.0;
-
-  /// Width reserved for the hour labels on the left edge.
-  static const double timeGutterWidth = 56.0;
-
-  /// Total pixel height of the scrollable timeline area.
-  static double get timelineHeight => hourHeight * totalHours;
 
   // ── Spacing ─────────────────────────────────────────────────────────
   static const double paddingSmall = 4.0;
@@ -44,4 +31,10 @@ class AppConstants {
   // ── Adaptive replanning ─────────────────────────────────────────────
   /// How often to re-check for task overruns while a task is in progress.
   static const Duration overrunCheckInterval = Duration(seconds: 30);
+
+  // ── Outcomes ────────────────────────────────────────────────────────
+  /// Default and allowed range for the daily outcome cap (Settings).
+  static const int defaultOutcomeCap = 3;
+  static const int minOutcomeCap = 1;
+  static const int maxOutcomeCap = 5;
 }

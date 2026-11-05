@@ -36,15 +36,15 @@ Summarized; see git history for the full itemized checklists.
 - [x] Validation: analyze clean, tests green (UI may be temporarily broken where it referenced priority — fix minimally, it is deleted in Phase 11)
 
 ## Phase 11 — Design System & App Shell
-- [ ] Bundle one OFL font (e.g. Inter) under `assets/fonts/` and register it in `pubspec.yaml` `fonts:` (asset only — no package)
-- [ ] Rewrite `core/theme.dart`: dark + light `ThemeData` from tokens; one accent color; neutral surfaces; hairline dividers; no elevation; tabular-figure numeral style
-- [ ] Add `SettingsRepository` (`hyperday/settings.json`, atomic write) and `SettingsModel` (`themeMode`: dark default / light / system; `outcomeCap`: default 3, range 1–5; `selectedCalendarIds`)
-- [ ] Wire `SettingsModel` into `main.dart` / `app.dart` (`themeMode`, dark default)
-- [ ] Delete `lib/features/day_view/` entirely
-- [ ] Create `features/day/day_screen.dart` skeleton: date header with prev/next, empty sections for load bar / Now / Outcomes / Agenda, bottom capture-bar placeholder
-- [ ] Create `features/settings/settings_screen.dart` with theme selector and outcome cap (calendar section added in Phase 14); wire `outcomeCap` into `DayPlannerModel`; reachable from Day header
-- [ ] Replace widget smoke test with one for the new `DayScreen`
-- [ ] Validation: review dark and light themes in the running app
+- [x] Bundle one OFL font (e.g. Inter) under `assets/fonts/` and register it in `pubspec.yaml` `fonts:` (asset only — no package)
+- [x] Rewrite `core/theme.dart`: dark + light `ThemeData` from tokens; one accent color; neutral surfaces; hairline dividers; no elevation; tabular-figure numeral style
+- [x] Add `SettingsRepository` (`hyperday/settings.json`, atomic write) and `SettingsModel` (`themeMode`: dark default / light / system; `outcomeCap`: default 3, range 1–5; `selectedCalendarIds`)
+- [x] Wire `SettingsModel` into `main.dart` / `app.dart` (`themeMode`, dark default)
+- [x] Delete `lib/features/day_view/` entirely
+- [x] Create `features/day/day_screen.dart` skeleton: date header with prev/next, empty sections for load bar / Now / Outcomes / Agenda, bottom capture-bar placeholder
+- [x] Create `features/settings/settings_screen.dart` with theme selector and outcome cap (calendar section added in Phase 14); wire `outcomeCap` into `DayPlannerModel`; reachable from Day header
+- [x] Replace widget smoke test with one for the new `DayScreen`
+- [x] Validation: review dark and light themes in the running app
 
 ## Phase 12 — Day Screen
 - [ ] `services/day_stats.dart`: pure `loadBreakdown(schedule, now)` → minutes of Meetings / Outcomes / Other / Free across the remaining day window
@@ -91,4 +91,4 @@ Summarized; see git history for the full itemized checklists.
 
 ---
 
-**Current status:** Engine (Phases 1–9) complete, including the 2026-11-05 Phase 9 fixes. Phase 10 complete. **Next: Phase 11.**
+**Current status:** Engine (Phases 1–9) complete, including the 2026-11-05 Phase 9 fixes. Phases 10–11 complete. **Next: Phase 12.**
