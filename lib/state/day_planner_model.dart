@@ -8,6 +8,7 @@ import '../models/schedule_suggestion.dart';
 import '../models/scheduled_task.dart';
 import '../models/task.dart';
 import '../services/day_repository.dart';
+import '../services/day_stats.dart';
 import '../services/scheduler.dart';
 
 /// Central state holder for the current day's tasks.
@@ -334,9 +335,8 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Re-runs the scheduling engine on the current task list.
   void _reschedule() {
-    final now = TimeOfDay.now();
-    final nowMinutes = now.hour * 60 + now.minute;
-    _releaseInvalidHolds(nowMinutes);
+    final nowMinutes = _nowMinutesForViewedDay;
+    _releaseInvalidHolds(nowMinutes ?? AppConstants.dayStartHour * 60);
 
     // Held tasks are handed to the scheduler as pinned at their held start,
     // then mapped back to the real (floating) task in the result.
@@ -372,6 +372,25 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
       ],
       overflow: result.overflow,
     );
+  }
+
+  /// The current time in minutes from midnight when viewing today;
+  /// `null` for any other day, so the whole day window is plannable.
+  int? get _nowMinutesForViewedDay {
+    final now = DateTime.now();
+    if (_dateOnly(now) != _viewedDate) return null;
+    return now.hour * 60 + now.minute;
+  }
+
+  /// Whether the viewed day is today.
+  bool get isViewingToday => _dateOnly(DateTime.now()) == _viewedDate;
+
+  /// What to show on the Now card: see [DayStats.currentItem]. Always
+  /// `null` when not viewing today.
+  ScheduledTask? get currentItem {
+    final nowMinutes = _nowMinutesForViewedDay;
+    if (nowMinutes == null) return null;
+    return DayStats.currentItem(_schedule, nowMinutes);
   }
 
   /// Drops holds that no longer make sense: the task is gone, no longer a

@@ -47,16 +47,18 @@ Summarized; see git history for the full itemized checklists.
 - [x] Validation: review dark and light themes in the running app
 
 ## Phase 12 — Day Screen
-- [ ] `services/day_stats.dart`: pure `loadBreakdown(schedule, now)` → minutes of Meetings / Outcomes / Other / Free across the remaining day window
-- [ ] `widgets/load_bar.dart`: single segmented bar from `loadBreakdown`, with a compact legend
-- [ ] `DayPlannerModel.currentItem` getter: in-progress task, else committed task whose window contains now, else next upcoming (pure function of schedule + now)
-- [ ] `widgets/now_card.dart`: title, large live timer (elapsed when in progress, "starts in" otherwise), Start / Done / Cancel gated by status rules; overrun state in accent warning color; hidden when not viewing today
-- [ ] `widgets/outcomes_list.dart`: outcomes up to the cap with check state; empty prompt "What would make today a win?"
-- [ ] `widgets/agenda_list.dart`: remaining committed items, one line each (time · title · duration); meetings visually muted; completed/cancelled shown muted/struck; overflow section at end with "Outcome doesn't fit today" callout when applicable
-- [ ] `widgets/suggestion_banner.dart`: restyled; same Accept/Dismiss wiring
-- [ ] `widgets/item_sheet.dart`: title, duration, kind (Meeting / At a set time / Anytime), time picker when needed, Outcome toggle; same validation rules; delete action
-- [ ] Tap any agenda/outcome item to open the item sheet
-- [ ] Tests: `loadBreakdown`, `currentItem`
+- [x] `services/day_stats.dart`: pure `loadBreakdown(schedule, now)` → minutes of Meetings / Outcomes / Other / Free across the remaining day window
+- [x] `widgets/load_bar.dart`: single segmented bar from `loadBreakdown`, with a compact legend
+- [x] `DayPlannerModel.currentItem` getter: in-progress task, else committed task whose window contains now, else next upcoming (pure function of schedule + now)
+- [x] `widgets/now_card.dart`: title, large live timer (elapsed when in progress, "starts in" otherwise), Start / Done / Cancel gated by status rules; overrun state in accent warning color; hidden when not viewing today
+- [x] `widgets/outcomes_list.dart`: outcomes up to the cap with check state; empty prompt "What would make today a win?"
+- [x] `widgets/agenda_list.dart`: remaining committed items, one line each (time · title · duration); meetings visually muted; completed/cancelled shown muted/struck; overflow section at end with "Outcome doesn't fit today" callout when applicable
+- [x] `widgets/suggestion_banner.dart`: restyled; same Accept/Dismiss wiring
+- [x] `widgets/item_sheet.dart`: title, duration, kind (Meeting / At a set time / Anytime), time picker when needed, Outcome toggle; same validation rules; delete action
+- [x] Tap any agenda/outcome item to open the item sheet
+- [x] Tests: `loadBreakdown`, `currentItem`
+- [x] Fix: scheduler now plans non-today days from the start of the day window (was using the current clock time)
+- [x] Simple capture bar (title only → item sheet); parsing comes in Phase 13
 - [ ] Validation: review full Day screen in the running app (phone-sized)
 
 ## Phase 13 — Capture & Triage
@@ -91,4 +93,4 @@ Summarized; see git history for the full itemized checklists.
 
 ---
 
-**Current status:** Engine (Phases 1–9) complete, including the 2026-11-05 Phase 9 fixes. Phases 10–11 complete. **Next: Phase 12.**
+**Current status:** Engine (Phases 1–9) complete, including the 2026-11-05 Phase 9 fixes. Phases 10–12 built; Phase 12 persona review in progress.

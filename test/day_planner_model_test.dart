@@ -291,6 +291,22 @@ void main() {
       expect(bMoved.isOutcome, isFalse);
     });
 
+    test('a future day is planned from the start of the day window',
+        () async {
+      final future = DateTime.now().add(const Duration(days: 2));
+      await model.setViewedDate(future);
+      final t = Task(
+        title: 'F',
+        durationMinutes: 30,
+        type: TaskType.floating,
+        date: future,
+      );
+      model.addTask(t);
+      expect(_startOf(model, t), 6 * 60);
+      expect(model.isViewingToday, isFalse);
+      expect(model.currentItem, isNull);
+    });
+
     test('day navigation no longer carries tasks forward', () async {
       model.addTask(task('A'));
       await model.setViewedDate(tomorrow);
