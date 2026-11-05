@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../core/constants.dart';
 import '../models/day_schedule.dart';
 import '../models/schedule_suggestion.dart';
+import '../models/scheduled_task.dart';
 import '../models/task.dart';
 import '../services/day_repository.dart';
 import '../services/scheduler.dart';
@@ -55,6 +56,17 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
   /// affects tasks other than the one directly mutated.
   ScheduleSuggestion? get suggestion => _suggestion;
 
+  /// The schedule as it was before the pending [_suggestion] was raised.
+  /// Non-null exactly when [_suggestion] is non-null. Dismissing restores
+  /// displaced tasks to their positions in this schedule.
+  DaySchedule? _suggestionBase;
+
+  /// Floating tasks held at a start time by a dismissed suggestion,
+  /// keyed by task id. Held tasks are scheduled as if pinned at that time.
+  /// Released by the next user mutation, or when the hold falls into the
+  /// past or collides with a fixed block (e.g. an overrunning task).
+  final Map<String, TimeOfDay> _heldStarts = {};
+
   bool _isLoading = false;
 
   /// True while an async load is in progress.
@@ -75,6 +87,8 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     _viewedDate = _dateOnly(date);
     _tasks.clear();
     _suggestion = null;
+    _suggestionBase = null;
+    _heldStarts.clear();
     _schedule = DaySchedule.empty;
     _isLoading = true;
     notifyListeners();
@@ -246,13 +260,24 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     // The proposed schedule is already _schedule (reschedule ran as part
     // of the triggering mutation). We just clear the suggestion.
     _suggestion = null;
+    _suggestionBase = null;
     notifyListeners();
   }
 
   /// Dismisses the current suggestion without applying it.
+  ///
+  /// Floating tasks keep the positions they had before the suggestion was
+  /// raised; the rest of the day is rescheduled around them.
   void dismissSuggestion() {
     if (_suggestion == null) return;
+    for (final st in _suggestionBase!.committed) {
+      if (st.task.type == TaskType.floating) {
+        _heldStarts[st.task.id] = st.computedStartTime;
+      }
+    }
     _suggestion = null;
+    _suggestionBase = null;
+    _reschedule();
     notifyListeners();
   }
 
@@ -325,12 +350,80 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
   /// Re-runs the scheduling engine on the current task list.
   void _reschedule() {
     final now = TimeOfDay.now();
-    _schedule = Scheduler.schedule(
-      _tasks,
+    final nowMinutes = now.hour * 60 + now.minute;
+    _releaseInvalidHolds(nowMinutes);
+
+    // Held tasks are handed to the scheduler as pinned at their held start,
+    // then mapped back to the real (floating) task in the result.
+    final result = Scheduler.schedule(
+      [
+        for (final t in _tasks)
+          _heldStarts.containsKey(t.id)
+              ? t.copyWith(
+                  type: TaskType.pinned,
+                  startTime: () => _heldStarts[t.id],
+                )
+              : t,
+      ],
       dayStartHour: AppConstants.dayStartHour,
       dayEndHour: AppConstants.dayEndHour,
-      nowMinutes: now.hour * 60 + now.minute,
+      nowMinutes: nowMinutes,
     );
+
+    if (_heldStarts.isEmpty) {
+      _schedule = result;
+      return;
+    }
+    final byId = {for (final t in _tasks) t.id: t};
+    _schedule = DaySchedule(
+      committed: [
+        for (final st in result.committed)
+          _heldStarts.containsKey(st.task.id)
+              ? ScheduledTask(
+                  task: byId[st.task.id]!,
+                  computedStartTime: st.computedStartTime,
+                )
+              : st,
+      ],
+      overflow: result.overflow,
+    );
+  }
+
+  /// Drops holds that no longer make sense: the task is gone, no longer a
+  /// not-started floating task, its held start is in the past (floating
+  /// tasks are never placed in the past), or it collides with a fixed
+  /// block such as a hard task or an overrunning in-progress task.
+  void _releaseInvalidHolds(int nowMinutes) {
+    if (_heldStarts.isEmpty) return;
+
+    final fixedBlocks = <(int, int)>[];
+    for (final t in _tasks) {
+      if (_heldStarts.containsKey(t.id)) continue;
+      if (t.status == TaskStatus.inProgress && t.startedAt != null) {
+        final start = t.startedAt!.hour * 60 + t.startedAt!.minute;
+        final elapsed = nowMinutes - start;
+        final duration =
+            elapsed > t.durationMinutes ? elapsed : t.durationMinutes;
+        fixedBlocks.add((start, start + duration));
+      } else if (t.startTime != null) {
+        final start = _toMinutes(t.startTime!);
+        fixedBlocks.add((start, start + t.durationMinutes));
+      }
+    }
+
+    final byId = {for (final t in _tasks) t.id: t};
+    _heldStarts.removeWhere((id, heldStart) {
+      final task = byId[id];
+      if (task == null ||
+          task.type != TaskType.floating ||
+          task.status != TaskStatus.notStarted) {
+        return true;
+      }
+      final start = _toMinutes(heldStart);
+      final end = start + task.durationMinutes;
+      if (start < nowMinutes) return true;
+      return fixedBlocks.any((b) => start < b.$2 && end > b.$1);
+    });
   }
 
   /// Re-runs [_reschedule] and diffs the result against the previous
@@ -347,16 +440,25 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
   /// banner — when it would move an already-committed task, or change
   /// which tasks are in the overflow list, other than [excludeTaskId].
   /// Otherwise the change is auto-committed silently (no banner).
-  void _rescheduleAndDiff({String? excludeTaskId}) {
-    final oldSchedule = _schedule;
+  ///
+  /// While a suggestion is pending, the diff is taken against the schedule
+  /// from before that suggestion, so unanswered moves stay in the banner
+  /// (e.g. across periodic overrun checks) until accepted or dismissed.
+  ///
+  /// [releaseHolds] clears positions held by a dismissed suggestion; user
+  /// mutations pass `true` so the day is replanned fresh.
+  void _rescheduleAndDiff({String? excludeTaskId, bool releaseHolds = true}) {
+    if (releaseHolds) _heldStarts.clear();
+    final base = _suggestionBase ?? _schedule;
     _reschedule();
 
     final candidate = _buildSuggestion(
-      oldSchedule,
+      base,
       _schedule,
       excludeTaskId: excludeTaskId,
     );
     _suggestion = candidate.hasChanges ? candidate : null;
+    _suggestionBase = candidate.hasChanges ? base : null;
   }
 
   /// Returns `true` if any schedule-affecting field differs between
@@ -396,7 +498,7 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
   /// overrunning its estimate is reflected in downstream placement,
   /// surfacing a suggestion if the recompute displaces other tasks.
   void _checkOverrun() {
-    _rescheduleAndDiff();
+    _rescheduleAndDiff(releaseHolds: false);
     notifyListeners();
   }
 
@@ -425,6 +527,8 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
       if (st.task.id == excludeTaskId) continue;
       // Hard tasks are never moved.
       if (st.task.type == TaskType.hard) continue;
+      // In-progress tasks are never moved (PRD: excluded from suggestions).
+      if (st.task.status == TaskStatus.inProgress) continue;
       // Only report moves for tasks that are still active.
       if (st.task.status == TaskStatus.complete) continue;
       if (st.task.status == TaskStatus.cancelled) continue;

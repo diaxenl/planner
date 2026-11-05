@@ -1,141 +1,94 @@
 # HyperDay — Phase Tracker
 
-This file tracks implementation progress across all phases. Subsequent agents should read this file to determine where to pick up. Product vision and detailed rationale for Phases 8+ live in [plan-hyperDay.prompt.md](plan-hyperDay.prompt.md) — this file is the actionable checklist only; do not duplicate design rationale here.
+This file tracks implementation progress across all phases. Subsequent agents should read this file to determine where to pick up. Product vision, scope boundaries, and rationale live in [plan-hyperDay.prompt.md](plan-hyperDay.prompt.md) — this file is the actionable checklist only; do not duplicate design rationale here.
 
-**Phases 1–7 below are the completed v1 foundation** (static timeline planner). **Phases 8–13 are the new Adaptive Focus Planner overhaul** — see the PRD for why each phase exists.
+**Phases 1–9 are complete** and form the engine that the rebuild keeps. **Phases 10–15 are the Outcome-First rebuild.** The old Phases 10–13 (Live Tracking UI, Focus Now Screen, NL Quick Capture, Estimate Accuracy) are superseded and folded into the new phases below.
 
----
-
-## Architecture — Folder Structure
-- [x] Establish hybrid folder architecture (core/, models/, state/, services/, features/)
-- [x] Create `lib/main.dart` — minimal entry point (`runApp()` only)
-- [x] Create `lib/app.dart` — `HyperDayApp` widget (MaterialApp config)
-- [x] Create `lib/core/theme.dart` — `AppTheme` (colors, text styles, ThemeData)
-- [x] Create `lib/core/constants.dart` — `AppConstants` (day window, dimensions, validation bounds)
-- [x] Create `lib/core/utils.dart` — `AppUtils` (time↔pixel mapping, date formatting)
-- [x] Move day_view widgets into `lib/features/day_view/`
-- [x] Remove old `lib/screens/` and `lib/theme.dart`
-- [x] Update test import to reference `app.dart`
-
-## Phase 1 — Visual Shell
-- [x] Configure `MaterialApp` with app-wide theme (color scheme, typography, light mode)
-- [x] Create `AppTheme` class with design tokens (colors, text styles, spacing constants)
-- [x] Define day window constant (6 AM – 11 PM) and hour pixel height constant
-- [x] Build `DayScreen` with day header (date display + placeholder prev/next buttons)
-- [x] Build timeline scaffold with slot-based absolute positioning (`Stack` + `Positioned`)
-- [x] Add hour marker labels and horizontal dividers
-- [x] Add empty state overlay ("No tasks yet — tap + to get started")
-- [x] Add FAB placeholder (`+` icon, non-functional)
-
-## Phase 2 — Task Data Model & State
-- [x] Define `TaskType` and `Priority` enums
-- [x] Implement immutable `Task` class with `final` fields and `copyWith`
-- [x] Implement ID generation (16-char hex via `Random.secure()`)
-- [x] Define `ScheduledTask` wrapper class
-- [x] Implement `DayPlannerModel extends ChangeNotifier` with CRUD methods
-- [x] Add overlap validation in `addTask` / `updateTask` for hard/pinned tasks
-- [x] Wire `InheritedNotifier<DayPlannerModel>` above `MaterialApp`
-
-## Phase 3 — Task UI: Create, Edit & Remove
-- [x] Build add/edit task bottom sheet (title, duration, type toggle, time picker, priority)
-- [x] Add input validation (title 1–100 chars, duration 5–480 min, start time in window, overlap check)
-- [x] Connect FAB to open add-task bottom sheet
-- [x] Build task card widget (title, time range, duration, priority badge, type icon)
-- [x] Add hard task visual treatment (lock icon, tint)
-- [x] Add tap-to-edit on task cards
-- [x] Add swipe-to-delete with undo SnackBar
-- [x] Render hard/pinned tasks at fixed positions on timeline
-- [x] Render floating tasks in "Unscheduled" section below timeline
-
-## Phase 4 — Scheduling Engine
-- [x] Implement `schedule()` pure function (greedy slot-fill algorithm)
-- [x] Handle fixed block extraction (hard + pinned + completed tasks)
-- [x] Compute free gaps within day window
-- [x] Sort floating tasks by priority desc, duration asc
-- [x] Assign floating tasks to earliest fitting gap
-- [x] Return `DaySchedule` with `committed` and `overflow` lists
-- [x] Integrate scheduler into `DayPlannerModel` with performance guard (skip title-only edits)
-- [x] Move floating tasks from "Unscheduled" section onto timeline at computed positions
-- [x] Show overflow tasks at bottom with warning badge
-
-## Phase 5 — Complete & Smart Suggest
-- [x] Add complete button (check icon) to task cards
-- [x] Implement `markComplete` — freeze completed task as fixed block
-- [x] Run scheduler on remaining incomplete floating tasks after completion
-- [x] Generate `ScheduleSuggestion` diff (task, oldStart, newStart)
-- [x] Build `SuggestionBanner` UI below day header (summary + Accept/Dismiss)
-- [x] Wire Accept → commit proposed schedule
-- [x] Wire Dismiss → discard proposal
-- [x] Handle pinned task suggestions with "(pinned)" label
-
-## Phase 6 — Persistence
-- [x] Add `path_provider` to `pubspec.yaml`
-- [x] Define `DayRepository` abstract interface
-- [x] Implement `LocalDayRepository` (JSON read/write in `hyperday/` subdirectory)
-- [x] Implement `Task.toJson()` / `Task.fromJson()`
-- [x] Implement atomic writes (write to `.tmp`, then rename)
-- [x] Implement debounced saves (500ms) in `DayPlannerModel`
-- [x] Implement immediate save on `AppLifecycleState.paused`
-- [x] Add corrupt file handling (rename to `.corrupt`, return empty list)
-- [x] Wire `DayPlannerModel` to load from repository on init
-
-## Phase 7 — Multi-day & Carry-forward
-- [x] Make prev/next day header buttons functional
-- [x] Implement `setViewedDate` (save if dirty, then load new date)
-- [x] Implement carry-forward: scan previous day for incomplete non-hard tasks
-- [x] Set `carriedFromDate` on carried tasks
-- [x] Add idempotency check (skip if already carried)
-- [x] Display "Carried from [date]" label on carried task cards
+Every phase ends with a validation step: `flutter analyze` clean, `flutter test` green, and a review of the running app. Do not start the next phase until that is done.
 
 ---
 
-## Phase 8 — Data Model & State Overhaul
-- [x] Add `TaskStatus` enum (`notStarted`, `inProgress`, `complete`, `cancelled`) to `models/task.dart`
-- [x] Replace `Task.isComplete` (bool) with `Task.status` (`TaskStatus`); keep `completedAt`
-- [x] Add `Task.startedAt` (`DateTime?`) and `Task.actualDurationMinutes` (`int?`)
-- [x] Update `Task.copyWith`, `toJson`, `fromJson` for the new fields/enum
-- [x] Update every `isComplete` read/write site across `state/`, `services/`, `features/` to use `status`
-- [x] Update `Scheduler.schedule()`: treat `inProgress` tasks as fixed blocks (like hard tasks); `cancelled` tasks are excluded like completed ones
-- [x] Update `_scheduleFieldsChanged` in `DayPlannerModel` to include `status`/`startedAt` transitions
+## Completed — Engine (Phases 1–9)
 
-## Phase 9 — Adaptive Replanning Everywhere
-- [x] Add `DayPlannerModel.startTask(id)` — sets `status = inProgress`, `startedAt = now`, reschedules
-- [x] Add `DayPlannerModel.cancelTask(id)` — sets `status = cancelled`, reschedules
-- [x] Update `markComplete` — compute `actualDurationMinutes` from `startedAt`/`completedAt` (fallback: `startedAt = completedAt` if never started)
-- [x] Extend suggestion-diff generation (currently only in `markComplete`) to run after `addTask`, `updateTask`, `removeTask`, `startTask`, `cancelTask`
-- [x] Define "silent vs. suggested" rule: auto-commit reschedules that don't move an already-committed task or change overflow membership; otherwise populate `_suggestion` for the banner
-- [x] Add overrun detection: while a task is `inProgress` and elapsed time (`now - startedAt`) exceeds `durationMinutes`, mark it overrunning and reschedule using elapsed time as the effective duration for downstream placement
-- [x] Add a lightweight recurring check (e.g. periodic `Timer` while an `inProgress` task exists) to detect overruns without requiring a user action
+Summarized; see git history for the full itemized checklists.
 
-## Phase 10 — Live Time Tracking UI
-- [ ] Add Start / Complete / Cancel actions to `TaskCard` (replacing the single complete-only check icon), gated by allowed status transitions
-- [ ] Add a live elapsed-time readout on the `inProgress` task's card (ticking label, e.g. "12m elapsed")
-- [ ] Add a visual overrun state (color/border change) once elapsed time exceeds the estimate
-- [ ] Add a variance badge on completed cards: "Est 30m · Actual 42m (+12m)"
-- [ ] Add a "Cancelled" visual treatment (struck-through, muted) distinct from "Complete"
-
-## Phase 11 — Focus Now Screen
-- [ ] Create `lib/features/focus/focus_screen.dart` — new primary screen
-- [ ] Implement "current task" selection: `inProgress` task if any, else the committed task whose window contains now, else the next upcoming committed task
-- [ ] Create `widgets/focus_card.dart` — current task detail, live timer, Start/Complete/Cancel controls
-- [ ] Create `widgets/up_next_strip.dart` — preview of the next 1–2 committed tasks
-- [ ] Create `widgets/day_health_chip.dart` — comfortable/tight/overloaded indicator from remaining committed + overflow duration vs. remaining day window
-- [ ] Add a nav affordance from Focus Screen to the existing Timeline (`DayScreen`) view and back
-- [ ] Update `app.dart` — `home:` becomes `FocusScreen` (was `DayScreen`)
-
-## Phase 12 — Natural-Language Quick Capture
-- [ ] Create `lib/services/task_text_parser.dart` — pure Dart parser, no new dependency
-- [ ] Parse duration shorthand (`30m`, `1h`, `1h30m`), clock time (`3pm`, `15:00` → pinned type), explicit lock markers (`!!`, `locked` → hard type), priority markers (`!`, `high`, `low`)
-- [ ] Apply smart defaults for unparsed fields (duration 30 min if floating, priority medium)
-- [ ] Create `widgets/quick_capture_bar.dart` — free-text field that opens the existing `TaskBottomSheet` pre-filled with parsed fields as a confirmation/adjustment step before saving
-- [ ] Add a "Something came up" shortcut that opens the same quick-capture flow pre-set to high priority
-- [ ] Wire quick capture entry points into the Focus Screen
-
-## Phase 13 — Estimate Accuracy Surfacing
-- [ ] Add per-task variance display on completed `TaskCard`s (reuses data added in Phase 10)
-- [ ] Add a `DayPlannerModel` getter for a same-day aggregate accuracy stat (e.g. average overrun % across today's completed tasks, excluding cancelled)
-- [ ] Surface the aggregate stat subtly on the Focus Screen (e.g. small footer text)
+- **Architecture:** hybrid folders (`core/`, `models/`, `state/`, `services/`, `features/`), `main.dart` → `app.dart`.
+- **Phases 1–3 — Shell & tasks:** theme tokens, day window constants, timeline screen, task CRUD via bottom sheet, input validation, swipe-to-delete with undo.
+- **Phase 4 — Scheduler:** pure greedy `Scheduler.schedule()` → `DaySchedule` (`committed` + `overflow`).
+- **Phase 5 — Complete & suggest:** `ScheduleSuggestion` diff, Accept/Dismiss banner.
+- **Phase 6 — Persistence:** `DayRepository` / `LocalDayRepository`, JSON per day, atomic writes, 500 ms debounced saves, save on pause, corrupt-file handling.
+- **Phase 7 — Multi-day:** prev/next navigation, automatic carry-forward (to be replaced in Phase 15).
+- **Phase 8 — Status model:** `TaskStatus`, `startedAt`, `actualDurationMinutes`; in-progress tasks are fixed blocks.
+- **Phase 9 — Adaptive replanning:** start/cancel/complete, suggestion diff on every mutation, overrun detection with periodic check.
+  - Fix (2026-11-05): Dismiss now holds displaced tasks at their prior positions; the periodic overrun check no longer wipes a pending suggestion; in-progress tasks are excluded from suggestions.
 
 ---
 
-**Current status:** Phases 8–9 (Data Model & State Overhaul; Adaptive Replanning Everywhere) complete. Phases 10–13 (Adaptive Focus Planner overhaul) not started — see [plan-hyperDay.prompt.md](plan-hyperDay.prompt.md) for the full product spec.
+## Phase 10 — Model & Engine Simplification
+- [ ] Remove `Priority` enum and `Task.priority`
+- [ ] Add `Task.isOutcome` (`bool`, default `false`) and `Task.isInterruption` (`bool`, default `false`); update `copyWith`, `toJson`, `fromJson`
+- [ ] Scheduler: order floating tasks by `isOutcome` desc, then duration asc (replaces priority ordering)
+- [ ] `DayPlannerModel`: enforce max 3 outcomes per day on add/update (throw `ArgumentError` with a clear message)
+- [ ] `DayPlannerModel`: include `isOutcome` in `_scheduleFieldsChanged`
+- [ ] Remove automatic carry-forward from `setViewedDate` (replaced by explicit Tomorrow/Drop in Phase 15); keep `carriedFromDate`
+- [ ] Add `DayPlannerModel.moveToDate(id, date)` — removes the task from the current day and appends it (new date, same fields, `carriedFromDate` set) to the target day's file
+- [ ] Update existing tests for the removed priority; add tests for outcome ordering, outcome cap, `moveToDate`
+- [ ] Validation: analyze clean, tests green (UI may be temporarily broken where it referenced priority — fix minimally, it is deleted in Phase 11)
+
+## Phase 11 — Design System & App Shell
+- [ ] Bundle one OFL font (e.g. Inter) under `assets/fonts/` and register it in `pubspec.yaml` `fonts:` (asset only — no package)
+- [ ] Rewrite `core/theme.dart`: dark + light `ThemeData` from tokens; one accent color; neutral surfaces; hairline dividers; no elevation; tabular-figure numeral style
+- [ ] Add `SettingsRepository` (`hyperday/settings.json`, atomic write) and `SettingsModel` (`themeMode`: dark default / light / system; `selectedCalendarIds`)
+- [ ] Wire `SettingsModel` into `main.dart` / `app.dart` (`themeMode`, dark default)
+- [ ] Delete `lib/features/day_view/` entirely
+- [ ] Create `features/day/day_screen.dart` skeleton: date header with prev/next, empty sections for load bar / Now / Outcomes / Agenda, bottom capture-bar placeholder
+- [ ] Create `features/settings/settings_screen.dart` with theme selector (calendar section added in Phase 14); reachable from Day header
+- [ ] Replace widget smoke test with one for the new `DayScreen`
+- [ ] Validation: review dark and light themes in the running app
+
+## Phase 12 — Day Screen
+- [ ] `services/day_stats.dart`: pure `loadBreakdown(schedule, now)` → minutes of Meetings / Outcomes / Other / Free across the remaining day window
+- [ ] `widgets/load_bar.dart`: single segmented bar from `loadBreakdown`, with a compact legend
+- [ ] `DayPlannerModel.currentItem` getter: in-progress task, else committed task whose window contains now, else next upcoming (pure function of schedule + now)
+- [ ] `widgets/now_card.dart`: title, large live timer (elapsed when in progress, "starts in" otherwise), Start / Done / Cancel gated by status rules; overrun state in accent warning color; hidden when not viewing today
+- [ ] `widgets/outcomes_list.dart`: up to 3 outcomes with check state; empty prompt "What would make today a win?"
+- [ ] `widgets/agenda_list.dart`: remaining committed items, one line each (time · title · duration); meetings visually muted; completed/cancelled shown muted/struck; overflow section at end with "Outcome doesn't fit today" callout when applicable
+- [ ] `widgets/suggestion_banner.dart`: restyled; same Accept/Dismiss wiring
+- [ ] `widgets/item_sheet.dart`: title, duration, kind (Meeting / At a set time / Anytime), time picker when needed, Outcome toggle; same validation rules; delete action
+- [ ] Tap any agenda/outcome item to open the item sheet
+- [ ] Tests: `loadBreakdown`, `currentItem`
+- [ ] Validation: review full Day screen in the running app (phone-sized)
+
+## Phase 13 — Capture & Triage
+- [ ] `services/capture_parser.dart`: parse duration (`30m`, `1h`, `1h30m`; default 30m), time (`3pm`, `15:00` → At a set time), `*` → Outcome; remainder is the title
+- [ ] `widgets/capture_bar.dart`: pinned bottom text field; submit opens `item_sheet` pre-filled with the parsed draft (never saves directly)
+- [ ] "Something came up" button beside the capture bar → enter text → choose **Now** (add + start immediately) / **Later today** (Anytime) / **Tomorrow** (`moveToDate`); sets `isInterruption = true`
+- [ ] Tests: parser cases (each token alone, combined, none, edge cases like `1h30m`, `12pm`, `00:30` outside window)
+- [ ] Validation: review capture + interruption flows in the running app
+
+## Phase 14 — Calendar Import
+- [ ] **Prerequisite:** Android SDK installed and `flutter doctor` Android toolchain green
+- [ ] **Stop and confirm with the owner** the exact calendar package and version (candidate: `device_calendar`) before touching `pubspec.yaml`
+- [ ] Add the confirmed package; add Android calendar read permission (and iOS usage description)
+- [ ] `models/calendar_event.dart`: read-only (id, calendarId, title, start, end, isAllDay)
+- [ ] `services/calendar_source.dart`: `CalendarSource` interface (`listCalendars()`, `eventsFor(date, calendarIds)`); `DeviceCalendarSource`; `NoCalendarSource` for desktop/web/tests
+- [ ] Request permission on first use with a plain explanation; handle denial gracefully (app works without calendars)
+- [ ] `DayPlannerModel`: load events for the viewed date on load / refresh / day change; convert timed events to fixed Meeting blocks for the scheduler only (not persisted); skip declined events where exposed
+- [ ] Overlap validation includes imported meetings
+- [ ] All-day events shown as a one-line label under the date header
+- [ ] Pull-to-refresh on the Day screen re-reads events
+- [ ] Settings: calendar picker (all selected by default) + note about syncing accounts to the phone
+- [ ] Tests: event → fixed-block conversion and overlap validation using a fake `CalendarSource`
+- [ ] Validation: on a real Android device with Google, Microsoft, and iCloud accounts synced
+
+## Phase 15 — End-of-Day Review
+- [ ] `day_stats.dart`: `timeSplit(tasks, schedule)` → planned vs actual minutes for Meetings / Outcomes / Other / Interruptions; `estimateAccuracy(tasks)` → % over/under (excludes cancelled and zero-tracked tasks); `outcomesHit(tasks)`
+- [ ] `features/review/review_screen.dart`: outcomes hit (e.g. 2 / 3), time split bars, accuracy line
+- [ ] Unfinished items list: each resolved via **Tomorrow** (`moveToDate`) or **Drop** (cancel)
+- [ ] Entry point from the Day screen (always available; emphasized after the last committed item ends)
+- [ ] Tests: `timeSplit`, `estimateAccuracy`, `outcomesHit`
+- [ ] Validation: review a full simulated day end-to-end in the running app
+
+---
+
+**Current status:** Engine (Phases 1–9) complete, including the 2026-11-05 Phase 9 fixes. Rebuild planned; **Phase 10 not started.**

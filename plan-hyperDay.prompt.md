@@ -1,118 +1,196 @@
-# PRD: HyperDay — Adaptive Focus Planner
+# PRD: HyperDay — Outcome-First Day Planner
 
-**Vision:** A planner for professionals who need to get the most out of every working day. Instead of a static timeline you fill out once, HyperDay tracks what you're *actually* doing in real time, and replans the rest of the day the instant reality diverges from plan — a task runs long, finishes early, something urgent lands on your desk, or a plan gets cancelled. The app always knows what you should be doing right now.
+**Vision:** The day planner for high performers. You pick the few outcomes that make today a win; HyperDay builds the day around them, fits them between your real meetings, adapts the moment reality changes, and tells you at the end of the day whether your time actually went to what mattered.
 
-This supersedes the v1 "static timeline" plan (Phases 1–7, see [planner.todos.md](planner.todos.md)). V1 proved the core architecture (immutable `Task` model, `ChangeNotifier` state, greedy scheduler, JSON persistence) but only reacted to one event (task completion) and required a confusing multi-field form to create even a simple task. This plan overhauls the product on top of that foundation.
+**Audience:** An individual high performer who owns their own day — senior ICs, founders, leads, consultants. Meeting-heavy calendars, frequent interruptions, a handful of things that genuinely matter each day. This is a *personal* tool, not team management.
+
+**Design rule — KISS.** HyperDay excels at one job: *protect and deliver today's outcomes.* Every feature must serve that job with near-zero extra input. If a feature needs the user to categorize, configure, or maintain something, it is cut or derived automatically.
+
+This document supersedes the earlier "Adaptive Focus Planner" plan. Phases 1–9 (see [planner.todos.md](planner.todos.md)) built a solid engine — immutable `Task` model, greedy scheduler, adaptive replanning with suggestions, live time tracking, JSON persistence. **The engine is kept. The UI is rebuilt from scratch.** Refactoring of existing code is explicitly permitted where it serves this plan.
 
 ---
 
-## What's changing and why
+## Why the rethink
 
-- **v1 problem:** Creating a task means picking an abstract "type" (Floating/Timed/Locked) before you even know what you're describing. **Fix:** a natural-language quick-capture box is the primary way to add a task; a structured form remains as a fallback for precision editing.
-- **v1 problem:** The scheduler only reacts when a task is marked complete. Overruns, cancellations, and unplanned work aren't handled at all. **Fix:** every mutation (add, edit, delete, cancel, start/stop work, overrun detected) triggers a recompute of the rest of the day.
-- **v1 problem:** The day is presented as one long timeline — useful as an overview, but it doesn't answer "what should I be doing right now?" **Fix:** a new **Focus Screen** becomes the app's home screen, built around the single task you should be working on. The full timeline becomes a secondary view.
-- **v1 problem:** There's no notion of how long things actually took, so the schedule can't reflect reality. **Fix:** lightweight live time tracking (start/complete) records actual duration per task and surfaces the variance against the estimate.
+- **v1/v2 treated every task as equal.** A board-deck draft and "reply to Dave" were peer rows on a timeline. **Fix:** up to 3 **Outcomes** per day are first-class; everything else is supporting work.
+- **Meetings had to be typed in by hand.** No high performer will do that. **Fix:** meetings are imported from the phone's calendars (Google, Microsoft, Apple).
+- **It answered "what's next?" but not "did today go to what matters?"** **Fix:** an end-of-day review shows outcomes hit and where the time actually went — derived automatically, no tagging.
+- **It looked generic.** Stock Material, default blue, chips and shadows. **Fix:** a calm, dark-by-default, typographic design with a single accent color.
+- **Too many concepts on screen** (Hard/Pinned/Floating, Low/Med/High). **Fix:** plain language, fewer knobs.
 
 ---
 
 ## Core Concepts
 
-**Task types (unchanged from v1):**
-- **Hard** — immovable anchors (meetings, appointments). Fixed start time + duration. Scheduler never touches these.
-- **Pinned** — user-set start time, but the scheduler may suggest moving it if a conflict arises.
-- **Floating** — duration + priority only. Scheduler slots it into the best available gap.
+### Items on the day
 
-**Task status (replaces v1's `isComplete` bool):**
-- `notStarted` → `inProgress` → `complete`, or `notStarted`/`inProgress` → `cancelled`.
-- A task becomes `inProgress` when the user taps **Start**. While `inProgress`, the scheduler treats it as a fixed block (never silently moved out from under active work).
-- `cancelled` frees the task's slot immediately (like completion) but is excluded from estimate-accuracy stats and shown struck through with a "Cancelled" tag rather than removed from the day's record.
+Every item has a title, a duration, and one of three kinds (plain-language labels replace the old type names; internal enum names may stay):
 
-**Live time tracking:** Starting a task records `startedAt`. Completing it records `actualDurationMinutes` (elapsed real time). If elapsed time exceeds the estimate while a task is still `inProgress`, it's flagged as **overrunning** and the day is recomputed using the elapsed time as the effective duration, so the rest of the day reflects reality, not the original estimate.
+| User sees | Internal | Behavior |
+|---|---|---|
+| **Meeting** | `hard` | Fixed time. Never moved. Usually imported from the calendar. |
+| **At a set time** | `pinned` | User-chosen time. Scheduler may *suggest* moving it on conflict. |
+| **Anytime** | `floating` | Duration only. Scheduler places it. |
 
-**Adaptive replanning:** The scheduler recomputes on every mutation — add, edit, delete, cancel, start, complete, and overrun detection. Recomputation is silent when it only affects tasks that were never shown to the user in a fixed position (e.g. slotting a brand-new floating task into empty space). It surfaces a **Suggestion Banner** (Accept/Dismiss) whenever it would move an already-visible committed task or push a task into/out of overflow. Hard tasks and `inProgress` tasks are never included in a suggestion — they never move.
+Flags (no other categorization exists):
+- **Outcome** (`isOutcome`) — one of today's ≤ 3 most important things. Replaces the Low/Med/High priority system entirely.
+- **Interruption** (`isInterruption`) — set automatically when captured via "Something came up". Never set by hand.
 
-**Quick capture:** A free-text entry box parses shorthand like `Call mom 20m 3pm high` into a draft task (title, duration, time, priority) using a small pure-Dart parser — no new dependency. The parsed draft always opens in an editable confirmation step (the structured form) before saving, so nothing is created from a misparse. A dedicated **"Something came up"** shortcut opens the same box pre-set to high priority for fast interruption capture.
+Status lifecycle is unchanged from Phase 8: `notStarted → inProgress → complete`, or `notStarted/inProgress → cancelled`.
 
-**Focus Now:** The home screen shows one task at a time — the one currently `inProgress`, or whichever committed task's time window contains "now", or the next upcoming one if there's a gap. It shows a live elapsed-time readout, Start/Complete/Cancel controls, a 1–2 item "up next" preview, and a lightweight **day health** chip (comfortable / tight / overloaded) computed from remaining committed + overflow work versus remaining time in the day window. The full multi-hour timeline (v1's `DayScreen`) remains available as a secondary view.
+### Scheduling (engine kept, ordering simplified)
 
-**Estimate accuracy:** Completed task cards show the variance between estimate and actual (e.g. "Est 30m · Actual 42m (+12m)"). A simple same-day aggregate (e.g. average overrun %) is surfaced subtly on the Focus screen. No cross-day analytics or ML in this MVP — just visibility into today's accuracy.
+- Meetings, at-a-set-time items, and in-progress items are fixed blocks (unchanged).
+- Anytime items fill gaps from now onward: **Outcomes first**, then everything else; ties broken by shorter duration first. (Replaces priority ordering.)
+- Anything that cannot fit goes to **overflow** — an unplaced Outcome is called out prominently ("Outcome doesn't fit today").
+- Adaptive replanning, overrun handling, and the Accept/Dismiss suggestion behavior from Phase 9 are unchanged.
 
-**Persistence:** Unchanged from v1 — JSON on-device storage via `path_provider`, one file per day, atomic writes, repository pattern. New `Task` fields (`status`, `startedAt`, `actualDurationMinutes`) are added to the existing JSON schema; no migration path is needed since there is no production data yet.
+### Calendar import (must-have)
 
-**Target platform for testing:** Android phone (personal device). No desktop-specific interactions (keyboard shortcuts, hover states) are in scope.
+- Read-only import of events from the calendars already on the phone. Android and iOS both sync **Google, Microsoft (Outlook / 365 / Exchange), and Apple iCloud** accounts into the on-device calendar store, so reading that store covers all major providers with **one package, no OAuth, no server, no API keys**.
+- The user picks which calendars to include (Settings). Default: all.
+- Timed events become **Meetings** (fixed blocks). All-day events are shown as a one-line label at the top of the day, not as blocks. Events the user has declined are skipped where the platform exposes that.
+- Imported events are **not persisted** in HyperDay's files and **not editable** in HyperDay — they are re-read on app open, on pull-to-refresh, and on day change. The phone's calendar remains the source of truth.
+- Known limitation to surface in-app: an account must be synced to the phone's calendar (e.g. Outlook for Android requires its "sync calendars" option).
+- Not supported on Windows/web (dev preview only); a no-op calendar source is used there.
+
+### Screens (three, plus settings)
+
+1. **Day** (home). Shows today by default; prev/next to plan other days.
+   - **Load bar** — signature element. One horizontal bar for the remaining day window, split into Meetings / Outcomes / Other / Free. Readable in half a second.
+   - **Now card** (today only) — the current item (in-progress, else the one whose window contains now, else the next upcoming), big live timer, **Start / Done / Cancel**. Overrun turns the timer to the accent warning color.
+   - **Outcomes** — up to 3, with check state. If none are set: a single prompt, "What would make today a win?"
+   - **Agenda** — the rest of the day, one line per item: time · title · duration. Meetings visually quieter than work. Overflow at the end.
+   - **Suggestion banner** — restyled; same Accept/Dismiss behavior.
+   - **Capture bar** — pinned to the bottom, like a message composer. Replaces the FAB.
+2. **Review** (end of day, reachable any time from Day).
+   - Outcomes hit: e.g. **2 / 3**.
+   - Time split, planned vs actual: Meetings / Outcomes / Other / Interruptions. Derived from kinds and flags — no tagging.
+   - Estimate accuracy: one number (e.g. "Ran 18% over estimates").
+   - Unfinished items, each decided explicitly: **Tomorrow** or **Drop**. This replaces automatic carry-forward.
+3. **Item sheet** — bottom sheet to confirm/edit an item: title, duration, kind, time (if set), Outcome toggle.
+4. **Settings** — calendars to include, theme (Dark default / Light / System).
+
+The old vertical hour-grid timeline is **removed**. The load bar plus agenda replace it.
+
+### Capture & triage
+
+- **Capture bar** parses shorthand into a draft item (pure-Dart parser, no dependency):
+  - Duration: `30m`, `1h`, `1h30m` (default 30m)
+  - Time: `3pm`, `15:00` → At a set time
+  - Outcome: `*` anywhere marks it as an Outcome
+  - Everything else is the title
+  - The draft always opens in the Item sheet for confirmation — nothing is saved from a misparse.
+- **"Something came up"** button next to the capture bar: type it, then pick **Now** (start it immediately, replanning the day) / **Later today** (Anytime) / **Tomorrow**. Marks the item as an Interruption.
+
+### Visual identity
+
+- **Dark by default**; light theme available. All colors as tokens in `core/theme.dart`.
+- Near-black / off-white neutrals, **exactly one accent color**, used only for: the Now card, Outcomes, overrun warning. No colored priority chips, no drop shadows, hairline dividers.
+- **Typography carries the design.** Large, bold numerals for times and timers using tabular figures. One bundled font (OFL-licensed, e.g. Inter) added as a **font asset in `pubspec.yaml` — this is an asset, not a package dependency**.
+- Generous spacing, one-line agenda rows, minimal icons.
+
+### Persistence
+
+- Unchanged mechanism: JSON per day under `hyperday/`, atomic writes, debounced saves, repository pattern.
+- Schema change: `priority` removed; `isOutcome`, `isInterruption` added. No migration — there is no production data. Old fields in existing files are ignored.
+- New: `hyperday/settings.json` for theme and selected calendar IDs.
+
+### Target platform
+
+Android phone (personal device) is the primary target. iOS should work through the same code paths but is not actively tested. Windows / Chrome are dev-preview only. **Prerequisite for calendar work:** the Android SDK must be installed on the dev machine (currently missing).
+
+---
+
+## Explicitly NOT in scope (KISS)
+
+Recorded so they are not silently re-added:
+- Team features, delegation, "waiting on" lists.
+- Manual time-category tagging (time split is derived instead).
+- Separate "focus block" concept (Outcomes *are* the focus work).
+- Writing to the calendar, creating calendar events, OAuth/cloud sync.
+- Cross-day analytics, weekly review, notifications, widgets.
+- The vertical hour-grid timeline.
+
+Any of these can be proposed later as a new phase; none are implied by this document.
 
 ---
 
 ## Approved Dependencies
 
-No change from v1. Only `path_provider` (already added). The natural-language quick-capture parser is implemented as plain Dart string/regex parsing — **no new package required**. No other packages may be added without explicit approval.
+- `path_provider` — existing, unchanged.
+- **Calendar access package** — approved in principle by the owner (2026-11-05) for the Calendar Import phase. Candidate: `device_calendar` (Android + iOS, reads the on-device store). **The exact package and version must be confirmed with the owner immediately before it is added.** Nothing is added before that phase.
+- Bundled font file — asset only, no package.
+
+No other packages may be added without explicit approval (see `AGENTS.md`).
 
 ---
 
-## Input Validation Rules
+## Validation Rules
 
-Carried over from v1, still apply everywhere a task is created or edited:
-- **Title:** required, 1–100 characters, trimmed of leading/trailing whitespace.
+- **Title:** required, 1–100 characters, trimmed.
 - **Duration:** required, integer, 5–480 minutes.
-- **Start time:** must fall within the day window (6:00 AM – 11:00 PM by default); end time must also fall within the window.
-- **Overlap detection:** creating/editing a hard or pinned task is rejected if it overlaps an existing hard task.
-
-New rules for status transitions:
-- **Start** is only available on `notStarted` tasks.
-- **Complete** is only available on `inProgress` tasks (completing a `notStarted` task first transitions it through `inProgress` with `startedAt = completedAt`, i.e. zero tracked time — this covers "I forgot to hit start").
-- **Cancel** is available on `notStarted` or `inProgress` tasks, not on `complete` tasks.
+- **Time:** start and end within the day window (6:00 AM – 11:00 PM).
+- **Overlap:** a Meeting or At-a-set-time item is rejected if it overlaps a Meeting (user-created or imported).
+- **Outcomes:** at most 3 per day. Marking a 4th is rejected with a clear message.
+- **Status transitions:** unchanged — Start only from `notStarted`; Done from `notStarted` (zero tracked time) or `inProgress`; Cancel from `notStarted` or `inProgress`.
 
 ---
 
-## Phase Summary (new work, builds on completed v1 Phases 1–7)
+## Phase Summary (rebuild)
 
 | # | Phase | Goal |
 |---|-------|------|
-| 8 | **Data Model & State Overhaul** | Replace `isComplete` with `TaskStatus`; add `startedAt`/`actualDurationMinutes`; scheduler treats `inProgress` as fixed |
-| 9 | **Adaptive Replanning Everywhere** | Broaden reschedule + suggestion-diff triggers to every mutation; overrun detection |
-| 10 | **Live Time Tracking UI** | Start/Complete/Cancel controls, live elapsed timer, overrun visual state, variance badge |
-| 11 | **Focus Now Screen** | New home screen: current task, up-next, day health chip, becomes primary; Timeline becomes secondary |
-| 12 | **Natural-Language Quick Capture** | Free-text parser + confirmation step; "Something came up" urgent shortcut |
-| 13 | **Estimate Accuracy Surfacing** | Per-task variance display; same-day aggregate accuracy stat |
+| 10 | **Model & Engine Simplification** | `isOutcome`/`isInterruption` replace `Priority`; outcome-first scheduling; remove auto carry-forward; tests updated |
+| 11 | **Design System & App Shell** | Dark/light tokens, bundled font, settings persistence, new Day screen skeleton; delete old `day_view` UI |
+| 12 | **Day Screen** | Load bar, Now card + live timer + Start/Done/Cancel, Outcomes, Agenda, overflow, suggestion banner, Item sheet |
+| 13 | **Capture & Triage** | Capture bar + parser + confirmation; "Something came up" with Now / Later today / Tomorrow |
+| 14 | **Calendar Import** | Confirm + add calendar package; permissions; calendar picker; events as read-only Meetings |
+| 15 | **End-of-Day Review** | Outcomes hit, planned vs actual time split, accuracy, Tomorrow/Drop for unfinished items |
 
-Detailed task breakdowns for each phase are tracked in [planner.todos.md](planner.todos.md).
+Each phase is validated (analyze clean, tests pass, reviewed in the running app) before the next begins. Detailed checklists live in [planner.todos.md](planner.todos.md).
 
 ---
 
 ## Key Architectural Decisions
 
-- **State management:** unchanged — `ChangeNotifier` + `InheritedNotifier` above `MaterialApp`, no new packages.
-- **Scheduler:** the existing pure `Scheduler.schedule()` function gains one new rule: `inProgress` tasks are treated as fixed blocks (like hard tasks) so active work is never displaced. Everything else about gap-filling and priority ordering is unchanged.
-- **Suggestion diffing:** the existing `ScheduleSuggestion`/`TaskMove` diff mechanism (v1 Phase 5) is reused, but the model now calls it from every mutation path, not just `markComplete`.
-- **Quick capture parser:** a new stateless `services/task_text_parser.dart` returns a draft `Task` (or a partial result with fields left at smart defaults) from free text. It never saves directly — its output always flows into the existing structured form for confirmation.
-- **Focus selection:** "what's the current task" is a pure function of `DaySchedule` + `DateTime.now()`, computed the same way the timeline already computes positions — no new state machine.
-- **ID generation, storage format, debounced saves:** unchanged from v1.
+- **State management:** unchanged — `ChangeNotifier` + `InheritedNotifier`. A small `SettingsModel` (same pattern) holds theme and calendar selection.
+- **Scheduler:** stays a pure function. Ordering key changes from priority to `isOutcome`. Imported calendar events are converted to fixed blocks before being passed in; the scheduler has no knowledge of calendars.
+- **Calendar:** behind a `CalendarSource` interface (`services/calendar_source.dart`), mirroring the `DayRepository` pattern. `DeviceCalendarSource` for phones, `NoCalendarSource` for desktop/web/tests.
+- **Derived stats** (load bar segments, time split, accuracy, outcomes hit) are pure functions in `services/day_stats.dart` over `DaySchedule` + tasks — no stored state.
+- **Capture parser:** pure, stateless `services/capture_parser.dart`; never saves directly.
 
-### Folder Architecture (additions on top of v1)
+### Target Folder Architecture
 
 ```
 lib/
+  main.dart
+  app.dart                       # MaterialApp, theme from SettingsModel, home: DayScreen
+  core/
+    theme.dart                   # dark + light tokens, typography
+    constants.dart
+    utils.dart
   models/
-    task.dart                            # + TaskStatus enum, startedAt, actualDurationMinutes
+    task.dart                    # isOutcome, isInterruption; Priority removed
+    calendar_event.dart          # NEW — read-only imported event
+    day_schedule.dart, scheduled_task.dart, schedule_suggestion.dart
   services/
-    scheduler.dart                       # + inProgress tasks treated as fixed blocks
-    task_text_parser.dart                # NEW — free-text → draft Task (pure Dart, no deps)
+    scheduler.dart               # outcome-first ordering
+    day_repository.dart, local_day_repository.dart
+    settings_repository.dart     # NEW
+    calendar_source.dart         # NEW — interface + DeviceCalendarSource + NoCalendarSource
+    capture_parser.dart          # NEW
+    day_stats.dart               # NEW — load bar, time split, accuracy
   state/
-    day_planner_model.dart               # + startTask(), cancelTask(), overrun detection,
-                                          #   dayHealth getter, suggestion diffing on all mutations
+    day_planner_model.dart, day_planner_provider.dart
+    settings_model.dart          # NEW
   features/
-    focus/                               # NEW — primary home screen
-      focus_screen.dart                  # Current task, live timer, up-next, day health, quick capture
-      widgets/
-        focus_card.dart                  # Current task detail + Start/Complete/Cancel
-        up_next_strip.dart               # Next 1-2 committed tasks
-        day_health_chip.dart             # Comfortable/tight/overloaded indicator
-        quick_capture_bar.dart           # Free-text entry + "Something came up" shortcut
-    day_view/                            # Retained as secondary "Timeline" view (v1 Phases 1-3, 5)
-      ...                                # unchanged structure; reachable from Focus screen
-  app.dart                               # home: FocusScreen (was DayScreen)
+    day/                         # NEW home screen (replaces day_view/)
+      day_screen.dart
+      widgets/  load_bar.dart, now_card.dart, outcomes_list.dart, agenda_list.dart,
+                suggestion_banner.dart, item_sheet.dart, capture_bar.dart
+    review/
+      review_screen.dart
+    settings/
+      settings_screen.dart
 ```
-
-The v1 folder layout (`core/`, `models/`, `state/`, `services/`, `features/day_view/`) and its principles are unchanged — see [planner.todos.md](planner.todos.md) for the original structure. This section only lists what's new or modified.
-
-Detailed, ordered task breakdowns for Phases 8–13 are tracked in [planner.todos.md](planner.todos.md).
