@@ -102,8 +102,14 @@ Summarized; see git history for the full itemized checklists.
 - [x] Unfinished items list: each resolved via **Tomorrow** (`moveToDate`) or **Drop** (cancel)
 - [x] Entry point from the Day screen (always available; emphasized after the last committed item ends)
 - [x] Tests: `timeSplit`, `estimateAccuracy`, `outcomesHit`
-- [ ] Validation: review a full simulated day end-to-end in the running app
+- [x] Validation: persona review round 3 (screenshots + code) → fixes below
+- [x] R3 fix: Done without Start counts the estimate as time spent (excluded from accuracy)
+- [x] R3 fix: pausing keeps tracked minutes; they add to the next run and show on the timer
+- [x] R3 fix: Review score/time split are a snapshot at open (Drop/Tomorrow don't rewrite it); Drop/Tomorrow have Undo
+- [x] R3 fix: shared bar scale + one-line answer ("X% of your working time went to outcomes"); "Still open" mid-day
+- [x] R3 fix: Undo after Delete/Tomorrow restores the original position (Outcome order kept)
+- [x] R3 fix: duration range enforced in the model (capture can't create 0m / 10h items); load-bar header can't overflow; light-theme contrast
 
 ---
 
-**Current status:** Engine (Phases 1–9) complete, including the 2026-11-05 Phase 9 fixes. Phases 10–12 complete (incl. persona review fixes). Engine pieces of 13–15 done ahead (parser, calendar model integration, review stats). **Next: Phase 13 UI.**
+**Current status:** Engine (Phases 1–9) complete, including the 2026-11-05 Phase 9 fixes. Phases 10–13 and 15 complete, each through persona review. Phase 14 built except the device calendar source — **blocked on owner approval of `device_calendar` 4.3.3 (+ `sprintf`, `timezone`) and an Android SDK install.** Open owner decision: workday window (currently fixed 6 AM–11 PM).

@@ -37,9 +37,9 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     DateTime? initialDate,
     DayRepository? repository,
     CalendarSource calendarSource = const NoCalendarSource(),
-  })  : _viewedDate = _dateOnly(initialDate ?? DateTime.now()),
-        _repository = repository,
-        _calendarSource = calendarSource;
+  }) : _viewedDate = _dateOnly(initialDate ?? DateTime.now()),
+       _repository = repository,
+       _calendarSource = calendarSource;
 
   // ── State ───────────────────────────────────────────────────────────
 
@@ -152,10 +152,18 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
   ///
   /// Throws [ArgumentError] if the task is hard/pinned and its time range
   /// overlaps with an existing hard task.
-  void addTask(Task task) {
+  ///
+  /// [index], when given, inserts at that position instead of appending —
+  /// used by Undo so an Outcome keeps its place in the added order.
+  void addTask(Task task, {int? index}) {
+    _validateDuration(task);
     _validateOverlap(task);
     _validateOutcomeCap(task);
-    _tasks.add(task);
+    if (index != null && index >= 0 && index <= _tasks.length) {
+      _tasks.insert(index, task);
+    } else {
+      _tasks.add(task);
+    }
     _rescheduleAndDiff(excludeTaskId: task.id);
     _ensureOverrunMonitor();
     _scheduleSave();
@@ -183,6 +191,7 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
   void updateTask(String id, Task updated) {
     final index = _tasks.indexWhere((t) => t.id == id);
     if (index == -1) return;
+    _validateDuration(updated);
     _validateOverlap(updated, excludeId: id);
     _validateOutcomeCap(updated, excludeId: id);
 
@@ -204,8 +213,9 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
   /// currently [TaskStatus.notStarted].
   ///
   /// Only one thing is worked on at a time: any other in-progress task is
-  /// paused back to not started (its tracked time is discarded — KISS).
-  /// Returns the paused tasks as they were, so the caller can offer Undo.
+  /// paused back to not started, keeping the minutes tracked so far in
+  /// [Task.actualDurationMinutes] (added to on its next run). Returns the
+  /// paused tasks as they were, so the caller can offer Undo.
   List<Task> startTask(String id) {
     final index = _tasks.indexWhere((t) => t.id == id);
     if (index == -1) return const [];
@@ -219,6 +229,7 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
       _tasks[i] = t.copyWith(
         status: TaskStatus.notStarted,
         startedAt: () => null,
+        actualDurationMinutes: () => _trackedMinutes(t, DateTime.now()),
       );
     }
 
@@ -252,6 +263,17 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
+  /// Minutes tracked on [t] as of [at]: earlier runs (kept in
+  /// [Task.actualDurationMinutes] while not complete) plus the current run.
+  static int _trackedMinutes(Task t, DateTime at) {
+    final earlier = t.actualDurationMinutes ?? 0;
+    if (t.status != TaskStatus.inProgress || t.startedAt == null) {
+      return earlier;
+    }
+    final current = at.difference(t.startedAt!).inMinutes;
+    return earlier + (current < 0 ? 0 : current);
+  }
+
   /// Marks the task with [id] as complete at the given [completedAt] time.
   ///
   /// Computes [Task.actualDurationMinutes] from [Task.startedAt] to
@@ -269,9 +291,23 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
       return;
     }
 
-    final startedAt = current.startedAt ?? completedAt;
-    final rawMinutes = completedAt.difference(startedAt).inMinutes;
-    final actualDurationMinutes = rawMinutes < 0 ? 0 : rawMinutes;
+    // Time spent: everything tracked (earlier runs + the current one). If
+    // nothing was ever tracked ("I forgot to hit Start"), the estimate is
+    // the best guess for where the time went; `startedAt == completedAt`
+    // marks it as untracked so estimate accuracy leaves it out.
+    final tracked = _trackedMinutes(current, completedAt);
+    final DateTime startedAt;
+    final int actualDurationMinutes;
+    if (current.startedAt != null) {
+      startedAt = current.startedAt!;
+      actualDurationMinutes = tracked;
+    } else if (tracked > 0) {
+      startedAt = completedAt.subtract(Duration(minutes: tracked));
+      actualDurationMinutes = tracked;
+    } else {
+      startedAt = completedAt;
+      actualDurationMinutes = current.durationMinutes;
+    }
 
     _tasks[index] = current.copyWith(
       status: TaskStatus.complete,
@@ -360,7 +396,11 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Undoes [moveToDate]: removes [original]'s copy from [date] and puts
   /// [original] back on the viewed day.
-  Future<void> undoMoveToDate(Task original, DateTime date) async {
+  Future<void> undoMoveToDate(
+    Task original,
+    DateTime date, {
+    int? index,
+  }) async {
     final target = _dateOnly(date);
     if (_repository != null) {
       final targetTasks = await _repository.load(target);
@@ -369,7 +409,7 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
         targetTasks.where((t) => t.id != original.id).toList(),
       );
     }
-    addTask(original);
+    addTask(original, index: index);
   }
 
   // ── Calendar ────────────────────────────────────────────────────────
@@ -560,8 +600,9 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
       if (t.status == TaskStatus.inProgress && t.startedAt != null) {
         final start = t.startedAt!.hour * 60 + t.startedAt!.minute;
         final elapsed = nowMinutes - start;
-        final duration =
-            elapsed > t.durationMinutes ? elapsed : t.durationMinutes;
+        final duration = elapsed > t.durationMinutes
+            ? elapsed
+            : t.durationMinutes;
         fixedBlocks.add((start, start + duration));
       } else if (t.startTime != null) {
         final start = _toMinutes(t.startTime!);
@@ -684,11 +725,13 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
       if (!t.isOutcome || t.status != TaskStatus.notStarted) continue;
       final oldStart = oldStarts[t.id];
       if (oldStart == null || st.startMinutes <= oldStart) continue;
-      moves.add(TaskMove(
-        task: t,
-        oldStart: TimeOfDay(hour: oldStart ~/ 60, minute: oldStart % 60),
-        newStart: st.computedStartTime,
-      ));
+      moves.add(
+        TaskMove(
+          task: t,
+          oldStart: TimeOfDay(hour: oldStart ~/ 60, minute: oldStart % 60),
+          newStart: st.computedStartTime,
+        ),
+      );
     }
 
     final oldOverflowIds = oldSchedule.overflow.map((t) => t.id).toSet();
@@ -755,6 +798,15 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  /// Throws [ArgumentError] if [task]'s duration is outside the allowed
+  /// range (5 minutes to 8 hours).
+  static void _validateDuration(Task task) {
+    if (task.durationMinutes < AppConstants.durationMinMinutes ||
+        task.durationMinutes > AppConstants.durationMaxMinutes) {
+      throw ArgumentError('Duration must be 5 minutes to 8 hours.');
+    }
+  }
+
   /// Throws [ArgumentError] if [task] is an Outcome and the day already
   /// has [outcomeCap] active (non-cancelled) Outcomes besides [excludeId].
   /// Edits that keep an existing Outcome an Outcome are always allowed, so
@@ -766,10 +818,12 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
       return;
     }
     final count = _tasks
-        .where((t) =>
-            t.id != excludeId &&
-            t.isOutcome &&
-            t.status != TaskStatus.cancelled)
+        .where(
+          (t) =>
+              t.id != excludeId &&
+              t.isOutcome &&
+              t.status != TaskStatus.cancelled,
+        )
         .length;
     if (count >= outcomeCap) {
       throw ArgumentError(

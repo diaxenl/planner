@@ -8,29 +8,69 @@ import '../../state/day_planner_provider.dart';
 
 /// End-of-day review for the viewed day: Outcomes hit, where the time
 /// went (planned vs actual), estimate accuracy, and an explicit decision
-/// — Tomorrow or Drop — for everything left unfinished.
-class ReviewScreen extends StatelessWidget {
+/// — Tomorrow or Drop — for everything still open.
+///
+/// The score and time split are taken once when the screen opens, so
+/// resolving left-over items here doesn't rewrite the day's result.
+class ReviewScreen extends StatefulWidget {
   const ReviewScreen({super.key});
 
-  static Future<void> open(BuildContext context) => Navigator.of(context)
-      .push(MaterialPageRoute<void>(builder: (_) => const ReviewScreen()));
+  static Future<void> open(BuildContext context) => Navigator.of(
+    context,
+  ).push(MaterialPageRoute<void>(builder: (_) => const ReviewScreen()));
+
+  @override
+  State<ReviewScreen> createState() => _ReviewScreenState();
+}
+
+class _ReviewScreenState extends State<ReviewScreen> {
+  late final (int, int) _hit;
+  late final TimeSplit _split;
+  late final int? _accuracy;
+  bool _snapshotTaken = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_snapshotTaken) return;
+    final model = DayPlannerProvider.of(context);
+    _hit = DayStats.outcomesHit(model.tasks);
+    _split = DayStats.timeSplit(model.tasks, model.schedule);
+    _accuracy = DayStats.estimateAccuracy(model.tasks);
+    _snapshotTaken = true;
+  }
 
   @override
   Widget build(BuildContext context) {
     final model = DayPlannerProvider.of(context);
     final colors = HyperColors.of(context);
     final text = Theme.of(context).textTheme;
-    final tasks = model.tasks;
-    final (hit, total) = DayStats.outcomesHit(tasks);
-    final split = DayStats.timeSplit(tasks, model.schedule);
-    final accuracy = DayStats.estimateAccuracy(tasks);
-    final unfinished = tasks
-        .where((t) =>
-            t.type != TaskType.hard &&
-            (t.status == TaskStatus.notStarted ||
-                t.status == TaskStatus.inProgress))
-        .toList();
+    final (hit, total) = _hit;
+    final actual = _split.actual;
+    final planned = _split.planned;
     final date = model.viewedDate;
+    final isToday = model.isViewingToday;
+
+    final unfinished = model.tasks
+        .where(
+          (t) =>
+              t.type != TaskType.hard &&
+              (t.status == TaskStatus.notStarted ||
+                  t.status == TaskStatus.inProgress),
+        )
+        .toList();
+
+    // One scale for every bar, so lengths compare across buckets.
+    final scale = [
+      for (final b in TimeBucket.values) ...[actual[b]!, planned[b]!],
+    ].fold<int>(0, (m, v) => v > m ? v : m);
+    final worked =
+        actual[TimeBucket.outcomes]! +
+        actual[TimeBucket.other]! +
+        actual[TimeBucket.interruptions]!;
+    final outcomeShare = worked == 0
+        ? null
+        : (actual[TimeBucket.outcomes]! * 100 / worked).round();
 
     return Scaffold(
       appBar: AppBar(
@@ -56,43 +96,71 @@ class ReviewScreen extends StatelessWidget {
                   total == 0
                       ? 'No outcomes were set.'
                       : hit == total
-                          ? 'Every outcome done.'
-                          : 'outcomes done',
+                      ? 'Every outcome done.'
+                      : 'outcomes done',
                   style: text.bodyLarge,
                 ),
               ),
             ],
           ),
+          if (outcomeShare != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              '$outcomeShare% of your working time went to outcomes'
+              '${actual[TimeBucket.interruptions]! > 0 ? ', '
+                        '${AppUtils.formatDuration(actual[TimeBucket.interruptions]!)} '
+                        'to interruptions' : ''}.',
+              style: text.bodyMedium,
+            ),
+          ],
           const SizedBox(height: 32),
 
           // ── Time split ──
           Text('WHERE THE TIME WENT', style: text.labelSmall),
           const SizedBox(height: 12),
-          _bucket(context, 'Outcomes', colors.accent,
-              split.actual[TimeBucket.outcomes]!,
-              split.planned[TimeBucket.outcomes]!),
-          _bucket(context, 'Meetings', colors.meeting,
-              split.actual[TimeBucket.meetings]!,
-              split.planned[TimeBucket.meetings]!),
-          _bucket(context, 'Other', colors.other,
-              split.actual[TimeBucket.other]!,
-              split.planned[TimeBucket.other]!),
-          _bucket(context, 'Interruptions', colors.textSecondary,
-              split.actual[TimeBucket.interruptions]!, 0),
-          const SizedBox(height: 8),
-          Text(
-            switch (accuracy) {
-              null => 'Use Start and Done to see how your estimates hold up.',
-              0 => 'Your estimates were spot on.',
-              > 0 => 'Work ran $accuracy% over your estimates.',
-              _ => 'Work came in ${-accuracy}% under your estimates.',
-            },
-            style: text.bodyMedium,
+          _bucket(
+            context,
+            'Outcomes',
+            colors.accent,
+            actual[TimeBucket.outcomes]!,
+            planned[TimeBucket.outcomes]!,
+            scale,
           ),
+          _bucket(
+            context,
+            'Interruptions',
+            colors.accent.withValues(alpha: 0.4),
+            actual[TimeBucket.interruptions]!,
+            0,
+            scale,
+          ),
+          _bucket(
+            context,
+            'Other',
+            colors.other,
+            actual[TimeBucket.other]!,
+            planned[TimeBucket.other]!,
+            scale,
+          ),
+          _bucket(
+            context,
+            'Meetings',
+            colors.meeting,
+            actual[TimeBucket.meetings]!,
+            planned[TimeBucket.meetings]!,
+            scale,
+          ),
+          const SizedBox(height: 8),
+          Text(switch (_accuracy) {
+            null => 'Use Start and Done to see how your estimates hold up.',
+            0 => 'Your estimates were spot on.',
+            final a when a > 0 => 'Work ran $a% over your estimates.',
+            final a => 'Work came in ${-a}% under your estimates.',
+          }, style: text.bodyMedium),
           const SizedBox(height: 32),
 
-          // ── Unfinished ──
-          Text('LEFT OVER', style: text.labelSmall),
+          // ── Still open ──
+          Text(isToday ? 'STILL OPEN' : 'LEFT OVER', style: text.labelSmall),
           const SizedBox(height: 8),
           if (unfinished.isEmpty)
             Padding(
@@ -128,14 +196,11 @@ class ReviewScreen extends StatelessWidget {
                     ),
                   ),
                   TextButton(
-                    onPressed: () => model.cancelTask(t.id),
+                    onPressed: () => _drop(t),
                     child: const Text('Drop'),
                   ),
                   TextButton(
-                    onPressed: () => model.moveToDate(
-                      t.id,
-                      date.add(const Duration(days: 1)),
-                    ),
+                    onPressed: () => _tomorrow(t),
                     style: TextButton.styleFrom(foregroundColor: colors.accent),
                     child: const Text('Tomorrow'),
                   ),
@@ -147,18 +212,68 @@ class ReviewScreen extends StatelessWidget {
     );
   }
 
-  /// One bucket row: label, actual vs planned, and a bar of actual
-  /// against the larger of the two.
+  void _drop(Task task) {
+    final model = DayPlannerProvider.of(context);
+    model.cancelTask(task.id);
+    _snack('Dropped "${task.title}"', () => model.updateTask(task.id, task));
+  }
+
+  Future<void> _tomorrow(Task task) async {
+    final model = DayPlannerProvider.of(context);
+    final from = model.viewedDate;
+    final next = from.add(const Duration(days: 1));
+    final index = model.tasks.indexWhere((t) => t.id == task.id);
+    final moved = await model.moveToDate(task.id, next);
+    final lostOutcome = task.isOutcome && moved != null && !moved.isOutcome;
+    _snack(
+      lostOutcome
+          ? 'Moved "${task.title}" to tomorrow — not as an Outcome, '
+                'tomorrow is full'
+          : 'Moved "${task.title}" to tomorrow',
+      () {
+        if (model.viewedDate == from) {
+          model.undoMoveToDate(task, next, index: index);
+        }
+      },
+    );
+  }
+
+  void _snack(String message, VoidCallback undo) {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          action: SnackBarAction(
+            label: 'Undo',
+            onPressed: () {
+              try {
+                undo();
+              } on ArgumentError catch (e) {
+                messenger.showSnackBar(
+                  SnackBar(content: Text("Couldn't undo: ${e.message}")),
+                );
+              }
+            },
+          ),
+        ),
+      );
+  }
+
+  /// One bucket row: label, actual vs planned, and a bar of actual time on
+  /// the shared [scale].
   Widget _bucket(
     BuildContext context,
     String label,
     Color color,
     int actual,
     int planned,
+    int scale,
   ) {
     final colors = HyperColors.of(context);
     final text = Theme.of(context).textTheme;
-    final scale = actual > planned ? actual : planned;
     final detail = planned == 0
         ? (actual == 0 ? 'none' : 'unplanned')
         : 'of ${AppUtils.formatDuration(planned)} planned';
@@ -187,7 +302,10 @@ class ReviewScreen extends StatelessWidget {
               child: Row(
                 children: [
                   if (actual > 0)
-                    Expanded(flex: actual, child: Container(color: color)),
+                    Expanded(
+                      flex: actual,
+                      child: Container(color: color),
+                    ),
                   if (scale - actual > 0)
                     Expanded(
                       flex: scale - actual,

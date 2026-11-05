@@ -54,11 +54,12 @@ class DayStats {
     var meetings = 0, outcomes = 0, other = 0;
     for (final st in schedule.committed) {
       final t = st.task;
-      if (t.status == TaskStatus.complete ||
-          t.status == TaskStatus.cancelled) {
+      if (t.status == TaskStatus.complete || t.status == TaskStatus.cancelled) {
         continue;
       }
-      final start = st.startMinutes < windowStart ? windowStart : st.startMinutes;
+      final start = st.startMinutes < windowStart
+          ? windowStart
+          : st.startMinutes;
       final end = st.endMinutes > dayEnd ? dayEnd : st.endMinutes;
       final minutes = end - start;
       if (minutes <= 0) continue;
@@ -75,9 +76,11 @@ class DayStats {
     final busy = meetings + outcomes + other;
     final window = dayEnd - windowStart;
     final overflow = schedule.overflow
-        .where((t) =>
-            t.status != TaskStatus.complete &&
-            t.status != TaskStatus.cancelled)
+        .where(
+          (t) =>
+              t.status != TaskStatus.complete &&
+              t.status != TaskStatus.cancelled,
+        )
         .fold<int>(0, (sum, t) => sum + t.durationMinutes);
 
     return LoadBreakdown(
@@ -142,8 +145,10 @@ class DayStats {
     for (final st in schedule.committed) {
       final t = st.task;
       if (t.type != TaskType.hard || t.status == TaskStatus.cancelled) continue;
-      planned[TimeBucket.meetings] = planned[TimeBucket.meetings]! + t.durationMinutes;
-      actual[TimeBucket.meetings] = actual[TimeBucket.meetings]! + t.durationMinutes;
+      planned[TimeBucket.meetings] =
+          planned[TimeBucket.meetings]! + t.durationMinutes;
+      actual[TimeBucket.meetings] =
+          actual[TimeBucket.meetings]! + t.durationMinutes;
     }
 
     for (final t in tasks) {
@@ -161,11 +166,13 @@ class DayStats {
 
   /// How far actual time ran over (+) or under (−) estimates, as a whole
   /// percentage, across completed non-meeting tasks with tracked time.
-  /// `null` when there is nothing to compare.
+  /// Tasks completed without ever being started (`startedAt ==
+  /// completedAt`) are left out. `null` when there is nothing to compare.
   static int? estimateAccuracy(List<Task> tasks) {
     var estimated = 0, actual = 0;
     for (final t in tasks) {
       if (t.type == TaskType.hard || t.status != TaskStatus.complete) continue;
+      if (t.startedAt != null && t.startedAt == t.completedAt) continue;
       final tracked = t.actualDurationMinutes ?? 0;
       if (tracked <= 0) continue;
       estimated += t.durationMinutes;

@@ -156,6 +156,19 @@ void main() {
         t(30, status: TaskStatus.cancelled, actual: 60),
       ];
       expect(DayStats.estimateAccuracy(tasks), 20);
+
+      final untracked = Task(
+        title: 'U',
+        durationMinutes: 30,
+        type: TaskType.floating,
+        status: TaskStatus.complete,
+        startedAt: DateTime(2026, 10, 10, 9),
+        completedAt: DateTime(2026, 10, 10, 9),
+        actualDurationMinutes: 30,
+        date: _day,
+      );
+      expect(DayStats.estimateAccuracy([...tasks, untracked]), 20,
+          reason: 'completed without Start is not an estimate sample');
     });
 
     test('outcomesHit ignores cancelled', () {

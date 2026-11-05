@@ -94,8 +94,9 @@ class Task {
   /// on completion.
   final DateTime? startedAt;
 
-  /// Elapsed real time in minutes, recorded when the task is completed.
-  /// `null` until the task reaches [TaskStatus.complete].
+  /// Time spent, in minutes. On a completed task: the total tracked time
+  /// (or the estimate if nothing was tracked). Before completion: minutes
+  /// tracked on earlier runs that were paused, or `null`.
   final int? actualDurationMinutes;
 
   /// The calendar day this task belongs to (date only, time ignored).
@@ -136,8 +137,9 @@ class Task {
           ? actualDurationMinutes()
           : this.actualDurationMinutes,
       date: date ?? this.date,
-      carriedFromDate:
-          carriedFromDate != null ? carriedFromDate() : this.carriedFromDate,
+      carriedFromDate: carriedFromDate != null
+          ? carriedFromDate()
+          : this.carriedFromDate,
     );
   }
 
@@ -145,7 +147,8 @@ class Task {
   /// Returns `null` if [startTime] is `null`.
   TimeOfDay? get endTime {
     if (startTime == null) return null;
-    final totalMinutes = startTime!.hour * 60 + startTime!.minute + durationMinutes;
+    final totalMinutes =
+        startTime!.hour * 60 + startTime!.minute + durationMinutes;
     return TimeOfDay(hour: totalMinutes ~/ 60, minute: totalMinutes % 60);
   }
 
@@ -196,9 +199,7 @@ class Task {
       final id = json['id'] as String;
       final title = json['title'] as String;
       final durationMinutes = json['durationMinutes'] as int;
-      final type = TaskType.values.firstWhere(
-        (e) => e.name == json['type'],
-      );
+      final type = TaskType.values.firstWhere((e) => e.name == json['type']);
       final startTimeMap = json['startTime'] as Map<String, dynamic>?;
       final startTime = startTimeMap == null
           ? null

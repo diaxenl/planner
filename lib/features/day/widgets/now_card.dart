@@ -110,7 +110,10 @@ class _NowCardState extends State<NowCard> {
     var timerColor = colors.textPrimary;
 
     if (inProgress) {
-      final elapsed = now.difference(task.startedAt!);
+      // Includes minutes tracked on earlier, paused runs.
+      final elapsed =
+          now.difference(task.startedAt!) +
+          Duration(minutes: task.actualDurationMinutes ?? 0);
       final over = elapsed.inMinutes - task.durationMinutes;
       label = 'NOW';
       timer = AppUtils.formatTimer(elapsed);

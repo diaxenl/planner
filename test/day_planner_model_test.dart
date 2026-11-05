@@ -72,6 +72,28 @@ void main() {
       expect(_get(model, b).status, TaskStatus.inProgress);
     });
 
+    test('paused time is kept and added to the next run', () {
+      final a = _floating('A');
+      final b = _floating('B');
+      model
+        ..addTask(a)
+        ..addTask(b)
+        ..startTask(a.id);
+      // Pretend A has been running for 40 minutes.
+      model.updateTask(
+        a.id,
+        _get(model, a).copyWith(
+          startedAt: () => DateTime.now().subtract(const Duration(minutes: 40)),
+        ),
+      );
+      model.startTask(b.id);
+      expect(_get(model, a).actualDurationMinutes, 40);
+
+      model.startTask(a.id);
+      model.markComplete(a.id, DateTime.now());
+      expect(_get(model, a).actualDurationMinutes, 40);
+    });
+
     test('startTask is a no-op unless notStarted', () {
       final t = _floating('A');
       model.addTask(t);
@@ -108,7 +130,7 @@ void main() {
       expect(_get(model, t).status, TaskStatus.complete);
     });
 
-    test('markComplete on a never-started task records zero tracked time',
+    test('markComplete on a never-started task counts its estimate',
         () {
       final t = _floating('A');
       final at = DateTime.now();
@@ -120,7 +142,7 @@ void main() {
       expect(done.status, TaskStatus.complete);
       expect(done.startedAt, at);
       expect(done.completedAt, at);
-      expect(done.actualDurationMinutes, 0);
+      expect(done.actualDurationMinutes, 30);
     });
 
     test('markComplete on an inProgress task records elapsed minutes', () {
@@ -173,10 +195,15 @@ void main() {
     test('work pushed out of the day is reported', () {
       final now = TimeOfDay.now();
       final left = 23 * 60 - (now.hour * 60 + now.minute);
-      final filler = _floating('Filler', minutes: left);
-      model.addTask(filler);
-      model.addTask(_floating('Urgent', minutes: 5, outcome: true));
-      expect(model.suggestion?.pushedOut.map((t) => t.id), [filler.id]);
+      // Fill the rest of the day exactly (chunks of at most 8 hours).
+      var remaining = left - left % 5;
+      while (remaining >= 5) {
+        final chunk = remaining > 480 ? 480 : remaining;
+        model.addTask(_floating('Filler', minutes: chunk));
+        remaining -= chunk;
+      }
+      model.addTask(_floating('Urgent', minutes: 15, outcome: true));
+      expect(model.suggestion?.pushedOut, isNotEmpty);
     }, skip: TimeOfDay.now().hour >= 15 || TimeOfDay.now().hour < 6);
 
     test('title-only edit does not surface a suggestion', () {

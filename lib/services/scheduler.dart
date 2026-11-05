@@ -49,8 +49,7 @@ class Scheduler {
     // estimate.
     int effectiveDurationFor(Task t) {
       if (t.status == TaskStatus.inProgress && t.startedAt != null) {
-        final startedMin =
-            t.startedAt!.hour * 60 + t.startedAt!.minute;
+        final startedMin = t.startedAt!.hour * 60 + t.startedAt!.minute;
         final elapsed = effectiveNow - startedMin;
         if (elapsed > t.durationMinutes) return elapsed;
       }
@@ -90,16 +89,18 @@ class Scheduler {
     final fixedBlocks = fixedTasks.map((t) {
       final startMin = anchorFor(t).hour * 60 + anchorFor(t).minute;
       final durationMin = effectiveDurationFor(t);
-      return _Block(task: t, startMin: startMin, endMin: startMin + durationMin);
-    }).toList()
-      ..sort((a, b) => a.startMin.compareTo(b.startMin));
+      return _Block(
+        task: t,
+        startMin: startMin,
+        endMin: startMin + durationMin,
+      );
+    }).toList()..sort((a, b) => a.startMin.compareTo(b.startMin));
 
     // Start committed list with all fixed tasks.
     final committed = <ScheduledTask>[
       for (final b in fixedBlocks)
         ScheduledTask(task: b.task, computedStartTime: anchorFor(b.task)),
     ];
-
 
     // ── 3. Compute free gaps ──────────────────────────────────────────
     final gaps = <_Gap>[];
@@ -143,8 +144,9 @@ class Scheduler {
         if (gap.endMin <= effectiveNow) continue;
 
         // If the gap straddles now, clamp its usable start to now.
-        final usableStart =
-            gap.startMin < effectiveNow ? effectiveNow : gap.startMin;
+        final usableStart = gap.startMin < effectiveNow
+            ? effectiveNow
+            : gap.startMin;
         final available = gap.endMin - usableStart;
 
         if (available >= task.durationMinutes) {

@@ -11,10 +11,7 @@ import 'task.dart';
 /// Defined in Phase 2 so Phase 3 widgets can reference it. Populated by
 /// the scheduler in Phase 4.
 class ScheduledTask {
-  const ScheduledTask({
-    required this.task,
-    required this.computedStartTime,
-  });
+  const ScheduledTask({required this.task, required this.computedStartTime});
 
   /// The underlying task.
   final Task task;

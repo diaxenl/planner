@@ -7,10 +7,7 @@ import 'task.dart';
 /// (with computed start times) and any floating tasks that could not
 /// fit within the day window.
 class DaySchedule {
-  const DaySchedule({
-    required this.committed,
-    required this.overflow,
-  });
+  const DaySchedule({required this.committed, required this.overflow});
 
   /// All placed tasks with their computed start time.
   /// Includes hard, pinned, and successfully-scheduled floating tasks.

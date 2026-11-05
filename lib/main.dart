@@ -29,10 +29,7 @@ void main() async {
   runApp(
     SettingsProvider(
       model: settings,
-      child: DayPlannerProvider(
-        model: model,
-        child: const HyperDayApp(),
-      ),
+      child: DayPlannerProvider(model: model, child: const HyperDayApp()),
     ),
   );
 }

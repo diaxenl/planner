@@ -272,6 +272,7 @@ class _DayScreenState extends State<DayScreen> {
   }
 
   void _edit(DayPlannerModel model, Task task) {
+    final index = model.tasks.indexWhere((t) => t.id == task.id);
     ItemSheet.show(
       context,
       model: model,
@@ -279,7 +280,7 @@ class _DayScreenState extends State<DayScreen> {
       onAction: _act,
       onDeleted: (deleted) => _snack(
         'Deleted "${deleted.title}"',
-        undo: () => model.addTask(deleted),
+        undo: () => model.addTask(deleted, index: index),
       ),
     );
   }
@@ -323,6 +324,7 @@ class _DayScreenState extends State<DayScreen> {
       case ItemAction.tomorrow:
         final from = model.viewedDate;
         final next = from.add(const Duration(days: 1));
+        final index = model.tasks.indexWhere((t) => t.id == task.id);
         final moved = await model.moveToDate(task.id, next);
         final lostOutcome = task.isOutcome && moved != null && !moved.isOutcome;
         _snack(
@@ -332,7 +334,9 @@ class _DayScreenState extends State<DayScreen> {
               : 'Moved "${task.title}" to tomorrow',
           undo: () {
             // Only meaningful while still on the day it came from.
-            if (model.viewedDate == from) model.undoMoveToDate(task, next);
+            if (model.viewedDate == from) {
+              model.undoMoveToDate(task, next, index: index);
+            }
           },
         );
     }

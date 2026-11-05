@@ -35,10 +35,10 @@ class Settings {
   }
 
   Map<String, dynamic> toJson() => {
-        'themeMode': themeMode.name,
-        'outcomeCap': outcomeCap,
-        'selectedCalendarIds': selectedCalendarIds?.toList(),
-      };
+    'themeMode': themeMode.name,
+    'outcomeCap': outcomeCap,
+    'selectedCalendarIds': selectedCalendarIds?.toList(),
+  };
 
   /// Lenient: any missing or invalid field falls back to its default.
   static Settings fromJson(Map<String, dynamic> json) {
@@ -50,13 +50,13 @@ class Settings {
     final ids = json['selectedCalendarIds'];
     return Settings(
       themeMode: themeMode ?? defaults.themeMode,
-      outcomeCap: cap is int &&
+      outcomeCap:
+          cap is int &&
               cap >= AppConstants.minOutcomeCap &&
               cap <= AppConstants.maxOutcomeCap
           ? cap
           : defaults.outcomeCap,
-      selectedCalendarIds:
-          ids is List ? ids.whereType<String>().toSet() : null,
+      selectedCalendarIds: ids is List ? ids.whereType<String>().toSet() : null,
     );
   }
 }

@@ -36,8 +36,8 @@ class AppTheme {
     textPrimary: Color(0xFF141517),
     textSecondary: Color(0xFF5F646B),
     textMuted: Color(0xFF9A9EA4),
-    accent: Color(0xFFC98512),
-    onAccent: Color(0xFFFFFFFF),
+    accent: Color(0xFFB8760E),
+    onAccent: Color(0xFF1A1405),
     meeting: Color(0xFFA2A7AF),
     other: Color(0xFF5F656E),
   );
@@ -105,7 +105,9 @@ class AppTheme {
           foregroundColor: c.onAccent,
           minimumSize: const Size(0, 48),
           textStyle: text.labelLarge,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -114,7 +116,9 @@ class AppTheme {
           side: BorderSide(color: c.hairline),
           minimumSize: const Size(0, 48),
           textStyle: text.labelLarge,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
@@ -130,8 +134,10 @@ class AppTheme {
         filled: true,
         fillColor: c.background,
         hintStyle: text.bodyLarge?.copyWith(color: c.textMuted),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: c.hairline),
@@ -167,73 +173,70 @@ class AppTheme {
   }
 
   static TextTheme _textTheme(HyperColors c) => TextTheme(
-        // Live timer on the Now card.
-        displayLarge: TextStyle(
-          fontSize: 48,
-          fontWeight: FontWeight.w700,
-          letterSpacing: -2,
-          height: 1.0,
-          color: c.textPrimary,
-          fontFeatures: tabularFigures,
-        ),
-        // Big stats (e.g. outcomes hit in Review).
-        displaySmall: TextStyle(
-          fontSize: 36,
-          fontWeight: FontWeight.w700,
-          letterSpacing: -1,
-          color: c.textPrimary,
-          fontFeatures: tabularFigures,
-        ),
-        // Date header.
-        headlineSmall: TextStyle(
-          fontSize: 26,
-          fontWeight: FontWeight.w700,
-          letterSpacing: -0.6,
-          color: c.textPrimary,
-        ),
-        // Now-card title, sheet titles.
-        titleLarge: TextStyle(
-          fontSize: 20,
-          fontWeight: FontWeight.w600,
-          letterSpacing: -0.3,
-          color: c.textPrimary,
-        ),
-        // Outcome rows, app bar titles.
-        titleMedium: TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w600,
-          color: c.textPrimary,
-        ),
-        // Agenda rows.
-        bodyLarge: TextStyle(
-          fontSize: 15,
-          fontWeight: FontWeight.w500,
-          color: c.textPrimary,
-        ),
-        bodyMedium: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w400,
-          color: c.textSecondary,
-        ),
-        // Times and durations in rows.
-        bodySmall: TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w500,
-          color: c.textSecondary,
-          fontFeatures: tabularFigures,
-        ),
-        labelLarge: const TextStyle(
-          fontSize: 15,
-          fontWeight: FontWeight.w600,
-        ),
-        // Section headers ("OUTCOMES", "LATER TODAY").
-        labelSmall: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 1.2,
-          color: c.textMuted,
-        ),
-      );
+    // Live timer on the Now card.
+    displayLarge: TextStyle(
+      fontSize: 48,
+      fontWeight: FontWeight.w700,
+      letterSpacing: -2,
+      height: 1.0,
+      color: c.textPrimary,
+      fontFeatures: tabularFigures,
+    ),
+    // Big stats (e.g. outcomes hit in Review).
+    displaySmall: TextStyle(
+      fontSize: 36,
+      fontWeight: FontWeight.w700,
+      letterSpacing: -1,
+      color: c.textPrimary,
+      fontFeatures: tabularFigures,
+    ),
+    // Date header.
+    headlineSmall: TextStyle(
+      fontSize: 26,
+      fontWeight: FontWeight.w700,
+      letterSpacing: -0.6,
+      color: c.textPrimary,
+    ),
+    // Now-card title, sheet titles.
+    titleLarge: TextStyle(
+      fontSize: 20,
+      fontWeight: FontWeight.w600,
+      letterSpacing: -0.3,
+      color: c.textPrimary,
+    ),
+    // Outcome rows, app bar titles.
+    titleMedium: TextStyle(
+      fontSize: 16,
+      fontWeight: FontWeight.w600,
+      color: c.textPrimary,
+    ),
+    // Agenda rows.
+    bodyLarge: TextStyle(
+      fontSize: 15,
+      fontWeight: FontWeight.w500,
+      color: c.textPrimary,
+    ),
+    bodyMedium: TextStyle(
+      fontSize: 14,
+      fontWeight: FontWeight.w400,
+      color: c.textSecondary,
+    ),
+    // Times and durations in rows.
+    bodySmall: TextStyle(
+      fontSize: 13,
+      fontWeight: FontWeight.w500,
+      color: c.textSecondary,
+      fontFeatures: tabularFigures,
+    ),
+    labelLarge: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+    // Section headers ("OUTCOMES", "LATER TODAY").
+    labelSmall: TextStyle(
+      fontSize: 11,
+      fontWeight: FontWeight.w600,
+      letterSpacing: 1.2,
+      color: c.textMuted,
+    ),
+  );
 }
 
 /// HyperDay's color tokens, attached to [ThemeData.extensions].
@@ -281,19 +284,18 @@ class HyperColors extends ThemeExtension<HyperColors> {
     Color? onAccent,
     Color? meeting,
     Color? other,
-  }) =>
-      HyperColors(
-        background: background ?? this.background,
-        surface: surface ?? this.surface,
-        hairline: hairline ?? this.hairline,
-        textPrimary: textPrimary ?? this.textPrimary,
-        textSecondary: textSecondary ?? this.textSecondary,
-        textMuted: textMuted ?? this.textMuted,
-        accent: accent ?? this.accent,
-        onAccent: onAccent ?? this.onAccent,
-        meeting: meeting ?? this.meeting,
-        other: other ?? this.other,
-      );
+  }) => HyperColors(
+    background: background ?? this.background,
+    surface: surface ?? this.surface,
+    hairline: hairline ?? this.hairline,
+    textPrimary: textPrimary ?? this.textPrimary,
+    textSecondary: textSecondary ?? this.textSecondary,
+    textMuted: textMuted ?? this.textMuted,
+    accent: accent ?? this.accent,
+    onAccent: onAccent ?? this.onAccent,
+    meeting: meeting ?? this.meeting,
+    other: other ?? this.other,
+  );
 
   @override
   HyperColors lerp(HyperColors? other, double t) {

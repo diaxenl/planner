@@ -47,9 +47,7 @@ class LocalDayRepository implements DayRepository {
     final tmp = File('${file.path}.tmp');
 
     // Write to .tmp first, then atomically rename.
-    await tmp.writeAsString(
-      jsonEncode(tasks.map((t) => t.toJson()).toList()),
-    );
+    await tmp.writeAsString(jsonEncode(tasks.map((t) => t.toJson()).toList()));
     await tmp.rename(file.path);
   }
 

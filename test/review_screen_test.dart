@@ -46,6 +46,12 @@ void main() {
         TaskStatus.cancelled);
     expect(find.text('Inbox'), findsNothing);
 
+    // Dropping an open Outcome here doesn't rewrite the day's score.
+    await tester.tap(find.text('Drop').first);
+    await tester.pump();
+    expect(find.text('1 / 2'), findsOneWidget);
+    expect(find.text('Hiring plan'), findsNothing);
+
     model.dispose();
   }, skip: TimeOfDay.now().hour >= 22);
 }

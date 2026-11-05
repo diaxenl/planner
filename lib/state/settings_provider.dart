@@ -13,8 +13,8 @@ class SettingsProvider extends InheritedNotifier<SettingsModel> {
 
   /// Retrieves the nearest [SettingsModel]; dependents rebuild on change.
   static SettingsModel of(BuildContext context) {
-    final provider =
-        context.dependOnInheritedWidgetOfExactType<SettingsProvider>();
+    final provider = context
+        .dependOnInheritedWidgetOfExactType<SettingsProvider>();
     assert(provider != null, 'No SettingsProvider found in widget tree');
     return provider!.notifier!;
   }

@@ -37,11 +37,14 @@ class LoadBar extends StatelessWidget {
                 fontFeatures: AppTheme.tabularFigures,
               ),
             ),
-            Text(
-              dayLabel == 'today' ? '  for the rest of today' : '  $dayLabel',
-              style: text.bodyMedium,
+            Expanded(
+              child: Text(
+                dayLabel == 'today' ? '  for the rest of today' : '  $dayLabel',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: text.bodyMedium,
+              ),
             ),
-            const Spacer(),
             if (load.overflow > 0)
               Text(
                 '${AppUtils.formatDuration(load.overflow)} won\'t fit',

@@ -22,8 +22,7 @@ class SettingsModel extends ChangeNotifier {
   void setThemeMode(ThemeMode mode) =>
       _update(_settings.copyWith(themeMode: mode));
 
-  void setOutcomeCap(int cap) =>
-      _update(_settings.copyWith(outcomeCap: cap));
+  void setOutcomeCap(int cap) => _update(_settings.copyWith(outcomeCap: cap));
 
   void setSelectedCalendarIds(Set<String>? ids) =>
       _update(_settings.copyWith(selectedCalendarIds: () => ids));

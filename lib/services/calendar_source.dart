@@ -35,6 +35,5 @@ class NoCalendarSource implements CalendarSource {
   Future<List<CalendarEvent>> eventsFor(
     DateTime date,
     Set<String>? calendarIds,
-  ) async =>
-      const [];
+  ) async => const [];
 }
