@@ -1,5 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'app.dart';
+import 'services/calendar_source.dart';
+import 'services/device_calendar_source.dart';
 import 'services/local_day_repository.dart';
 import 'services/settings_repository.dart';
 import 'state/day_planner_model.dart';
@@ -13,13 +16,26 @@ void main() async {
   final settings = SettingsModel(repository: LocalSettingsRepository());
   await settings.load();
 
-  final model = DayPlannerModel(repository: LocalDayRepository())
-    ..outcomeCap = settings.settings.outcomeCap
-    ..calendarIds = settings.settings.selectedCalendarIds
-    ..setWorkday(
-      settings.settings.workdayStartHour,
-      settings.settings.workdayEndHour,
-    );
+  // The phone's calendar store exists only on Android and iOS.
+  final onPhone =
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
+  final CalendarSource calendar = onPhone
+      ? DeviceCalendarSource()
+      : const NoCalendarSource();
+
+  final model =
+      DayPlannerModel(
+          repository: LocalDayRepository(),
+          calendarSource: calendar,
+        )
+        ..outcomeCap = settings.settings.outcomeCap
+        ..calendarIds = settings.settings.selectedCalendarIds
+        ..setWorkday(
+          settings.settings.workdayStartHour,
+          settings.settings.workdayEndHour,
+        );
   settings.addListener(() {
     model.outcomeCap = settings.settings.outcomeCap;
     model.setWorkday(

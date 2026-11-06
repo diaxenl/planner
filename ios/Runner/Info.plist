@@ -66,5 +66,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCalendarsUsageDescription</key>
+	<string>HyperDay shows your meetings so it can plan your work around them.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>HyperDay shows your meetings so it can plan your work around them.</string>
 </dict>
 </plist>

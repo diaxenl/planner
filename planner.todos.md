@@ -84,7 +84,8 @@ Summarized; see git history for the full itemized checklists.
 ## Phase 14 — Calendar Import
 - [ ] **Prerequisite:** Android SDK installed and `flutter doctor` Android toolchain green
 - [x] Owner approved `device_calendar` 4.3.3 (2026-11-05)
-- [ ] Add the confirmed package; add Android calendar read permission (and iOS usage description)
+- [x] Add `device_calendar: 4.3.3` (pinned); Android `READ_CALENDAR` + `WRITE_CALENDAR` (the plugin requires both to report access; the app never writes); iOS `NSCalendarsUsageDescription` + `NSCalendarsFullAccessUsageDescription`
+- [x] `services/device_calendar_source.dart`: lists calendars, reads the day's events per selected calendar, skips cancelled and declined events, converts times to the phone's local zone; used on Android/iOS only (`NoCalendarSource` elsewhere)
 - [x] `models/calendar_event.dart`: read-only (id, calendarId, title, start, end, isAllDay)
 - [x] `services/calendar_source.dart`: `CalendarSource` interface (`listCalendars()`, `eventsFor(date, calendarIds)`); `DeviceCalendarSource`; `NoCalendarSource` for desktop/web/tests
 - [x] Request permission with a plain explanation (Settings → Allow calendar access); handle denial gracefully (app works without calendars) — wired to `CalendarSource.requestAccess`, live once the device source exists
@@ -119,4 +120,4 @@ Summarized; see git history for the full itemized checklists.
 
 ---
 
-**Current status:** Engine (Phases 1–9) complete, including the 2026-11-05 Phase 9 fixes. Phases 10–13 and 15 complete, each through persona review. Phase 14 built except the device calendar source — **blocked on owner approval of `device_calendar` 4.3.3 (+ `sprintf`, `timezone`) and an Android SDK install.** Open owner decision: workday window (currently fixed 6 AM–11 PM).
+**Current status:** Engine (Phases 1–9) complete. Phases 10–13, 15 and 16 complete. Phase 14 code complete with `device_calendar` 4.3.3 (owner-approved 2026-11-05); **remaining: Android SDK install (+ Windows Developer Mode for plugin builds) and a real-device check with Google, Microsoft and iCloud accounts.**
