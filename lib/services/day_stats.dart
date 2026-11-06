@@ -81,7 +81,7 @@ class DayStats {
               t.status != TaskStatus.complete &&
               t.status != TaskStatus.cancelled,
         )
-        .fold<int>(0, (sum, t) => sum + t.durationMinutes);
+        .fold<int>(0, (sum, t) => sum + t.remainingMinutes);
 
     return LoadBreakdown(
       meetings: meetings,
@@ -92,10 +92,13 @@ class DayStats {
     );
   }
 
-  /// The item to focus on at [nowMinutes]: the most recently started
-  /// in-progress item if any, else the not-started item whose window
-  /// contains now, else the next upcoming not-started item. `null` if
-  /// nothing is left today.
+  /// The item to focus on at [nowMinutes]: a meeting or set-time item
+  /// that is on right now; else the most recently started in-progress
+  /// item; else the not-started item whose window contains now; else the
+  /// next upcoming not-started item. `null` if nothing is left today.
+  ///
+  /// A meeting takes the card even while a task is running, so the task
+  /// can't hide it (see [runningItem]).
   static ScheduledTask? currentItem(DaySchedule schedule, int nowMinutes) {
     final active = schedule.committed.where(
       (st) =>
@@ -103,16 +106,17 @@ class DayStats {
           st.task.status == TaskStatus.inProgress,
     );
 
-    ScheduledTask? latest;
-    for (final st in active) {
-      if (st.task.status != TaskStatus.inProgress) continue;
-      final started = st.task.startedAt;
-      if (latest == null ||
-          (started != null && started.isAfter(latest.task.startedAt!))) {
-        latest = st;
+    final running = runningItem(schedule);
+    if (running != null) {
+      for (final st in active) {
+        if (_isFixedNotStarted(st) &&
+            st.startMinutes <= nowMinutes &&
+            nowMinutes < st.endMinutes) {
+          return st;
+        }
       }
+      return running;
     }
-    if (latest != null) return latest;
     for (final st in active) {
       if (st.startMinutes <= nowMinutes && nowMinutes < st.endMinutes) {
         return st;
@@ -123,6 +127,34 @@ class DayStats {
     }
     return null;
   }
+
+  /// The most recently started in-progress item (its first session, if
+  /// split), or `null` if nothing is running.
+  static ScheduledTask? runningItem(DaySchedule schedule) {
+    ScheduledTask? latest;
+    for (final st in schedule.committed) {
+      if (st.task.status != TaskStatus.inProgress) continue;
+      final started = st.task.startedAt;
+      if (latest == null ||
+          (started != null && started.isAfter(latest.task.startedAt!))) {
+        latest = st;
+      }
+    }
+    return latest;
+  }
+
+  /// The next not-started meeting or set-time item starting at or after
+  /// [nowMinutes], or `null`.
+  static ScheduledTask? nextFixedItem(DaySchedule schedule, int nowMinutes) {
+    for (final st in schedule.committed) {
+      if (_isFixedNotStarted(st) && st.startMinutes >= nowMinutes) return st;
+    }
+    return null;
+  }
+
+  static bool _isFixedNotStarted(ScheduledTask st) =>
+      st.task.type != TaskType.floating &&
+      st.task.status == TaskStatus.notStarted;
 
   /// The bucket a task's time counts toward. Meetings first, then
   /// interruptions (unplanned by definition), then Outcomes, then other.
@@ -180,6 +212,19 @@ class DayStats {
     }
     if (estimated == 0) return null;
     return ((actual - estimated) * 100 / estimated).round();
+  }
+
+  /// Minutes worked on Outcomes and on all non-meeting work, from tracked
+  /// time on completed tasks: `(outcomes, worked)`.
+  static (int, int) workedMinutes(List<Task> tasks) {
+    var outcomes = 0, worked = 0;
+    for (final t in tasks) {
+      if (t.type == TaskType.hard || t.status != TaskStatus.complete) continue;
+      final minutes = t.actualDurationMinutes ?? 0;
+      worked += minutes;
+      if (bucketOf(t) == TimeBucket.outcomes) outcomes += minutes;
+    }
+    return (outcomes, worked);
   }
 
   /// (completed, total) Outcomes, ignoring cancelled ones.

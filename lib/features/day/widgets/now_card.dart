@@ -13,7 +13,10 @@ import '../../../models/task.dart';
 ///   the estimate is exceeded. Actions: Done, Cancel.
 /// - Not started: counts down to its start (or shows its window if it
 ///   should already be under way). Actions: Start, Done, Cancel.
-/// - Meetings: shows time remaining / until start; no actions.
+/// - Meetings: shows time remaining / until start; no actions. If a task
+///   is still running when the meeting starts ([running]), says so and
+///   offers Pause.
+/// - A running task with a meeting starting soon ([startingSoon]) warns.
 /// - [item] null: an "all clear" message.
 class NowCard extends StatefulWidget {
   const NowCard({
@@ -25,9 +28,21 @@ class NowCard extends StatefulWidget {
     required this.onCancel,
     required this.onTap,
     required this.onReview,
+    this.running,
+    this.startingSoon,
+    this.onPause,
   });
 
   final ScheduledTask? item;
+
+  /// A task still running while [item] (a meeting) is on.
+  final ScheduledTask? running;
+
+  /// A meeting or set-time item about to start while [item] is running.
+  final ScheduledTask? startingSoon;
+
+  /// Pauses [running].
+  final VoidCallback? onPause;
 
   /// Whether the day has anything on it at all (picks the empty copy).
   final bool hasAnyTasks;
@@ -132,7 +147,7 @@ class _NowCardState extends State<NowCard> {
       );
       detail =
           'until ${AppUtils.formatClock(item.startMinutes)}'
-          ' · ${AppUtils.formatDuration(task.durationMinutes)}';
+          ' · ${AppUtils.formatDuration(item.durationMinutes)}';
     } else if (isMeeting) {
       label = 'IN A MEETING';
       timer = AppUtils.formatTimer(
@@ -142,7 +157,7 @@ class _NowCardState extends State<NowCard> {
     } else {
       // Planned for now but not started: nothing is ticking yet.
       label = 'READY';
-      timer = AppUtils.formatDuration(task.durationMinutes);
+      timer = AppUtils.formatDuration(item.durationMinutes);
       detail = 'planned now · tap Start when you begin';
     }
 
@@ -165,6 +180,13 @@ class _NowCardState extends State<NowCard> {
                   const SizedBox(width: 8),
                   Text('· OUTCOME', style: text.labelSmall),
                 ],
+                if (item.isSplit && !inProgress) ...[
+                  const SizedBox(width: 8),
+                  Text(
+                    '· SESSION ${item.part} OF ${item.parts}',
+                    style: text.labelSmall,
+                  ),
+                ],
               ],
             ),
             const SizedBox(height: 8),
@@ -178,6 +200,22 @@ class _NowCardState extends State<NowCard> {
             Text(timer, style: text.displayLarge?.copyWith(color: timerColor)),
             const SizedBox(height: 4),
             Text(detail, style: text.bodyMedium),
+            if (widget.startingSoon != null && inProgress) ...[
+              const SizedBox(height: 12),
+              _Warning(
+                text:
+                    '"${widget.startingSoon!.task.title}" starts '
+                    '${_inMinutes(widget.startingSoon!.startMinutes * 60 - nowSeconds)}',
+              ),
+            ],
+            if (widget.running != null && isMeeting) ...[
+              const SizedBox(height: 12),
+              _Warning(
+                text: '"${widget.running!.task.title}" is still running',
+                actionLabel: 'Pause',
+                onAction: widget.onPause,
+              ),
+            ],
             if (!isMeeting) ...[
               const SizedBox(height: 20),
               Row(
@@ -214,6 +252,38 @@ class _NowCardState extends State<NowCard> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// "in 4m", or "now" within the last minute.
+String _inMinutes(int seconds) {
+  final minutes = (seconds / 60).ceil();
+  return minutes <= 0 ? 'now' : 'in ${AppUtils.formatDuration(minutes)}';
+}
+
+/// One accent-colored line, with an optional action.
+class _Warning extends StatelessWidget {
+  const _Warning({required this.text, this.actionLabel, this.onAction});
+
+  final String text;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = HyperColors.of(context);
+    final style = Theme.of(context).textTheme.bodyMedium;
+    return Row(
+      children: [
+        Icon(Icons.warning_amber_rounded, size: 18, color: colors.accent),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(text, style: style?.copyWith(color: colors.accent)),
+        ),
+        if (actionLabel != null)
+          FilledButton(onPressed: onAction, child: Text(actionLabel!)),
+      ],
     );
   }
 }

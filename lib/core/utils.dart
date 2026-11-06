@@ -77,4 +77,34 @@ class AppUtils {
     if (diff == -1) return 'Yesterday';
     return weekdayName(d.weekday);
   }
+
+  /// The next weekday (Monday–Friday) after [date]: Friday → Monday.
+  static DateTime nextWorkday(DateTime date) {
+    var d = DateTime(date.year, date.month, date.day + 1);
+    while (d.weekday == DateTime.saturday || d.weekday == DateTime.sunday) {
+      d = DateTime(d.year, d.month, d.day + 1);
+    }
+    return d;
+  }
+
+  /// [relativeDayLabel] for dates within a week either side of [today];
+  /// further out, "Tue, Nov 24".
+  static String friendlyDate(DateTime date, DateTime today) {
+    final d = DateTime(date.year, date.month, date.day);
+    final t = DateTime(today.year, today.month, today.day);
+    final diff = d.difference(t).inDays;
+    if (diff.abs() < 7) return relativeDayLabel(d, t);
+    return '${weekdayName(d.weekday).substring(0, 3)}, '
+        '${monthName(d.month).substring(0, 3)} ${d.day}';
+  }
+
+  /// [friendlyDate] for use mid-sentence: "tomorrow", "Monday",
+  /// "Tue, Nov 24".
+  static String dayPhrase(DateTime date, DateTime today) {
+    final label = friendlyDate(date, today);
+    return switch (label) {
+      'Today' || 'Tomorrow' || 'Yesterday' => label.toLowerCase(),
+      _ => label,
+    };
+  }
 }

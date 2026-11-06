@@ -109,6 +109,27 @@ class SettingsScreen extends StatelessWidget {
                 settings.workdayEndHour - 1 > settings.workdayStartHour,
             canIncrease: settings.workdayEndHour < 24,
           ),
+          const SizedBox(height: 16),
+          Text('Breathing room', style: text.bodyLarge),
+          const SizedBox(height: 2),
+          Text(
+            'Free time kept around meetings and between planned work. '
+            'Skipped on days too full for it.',
+            style: text.bodyMedium,
+          ),
+          const SizedBox(height: 8),
+          SegmentedButton<int>(
+            showSelectedIcon: false,
+            segments: [
+              for (final m in AppConstants.bufferChoices)
+                ButtonSegment(
+                  value: m,
+                  label: Text(m == 0 ? 'None' : AppUtils.formatDuration(m)),
+                ),
+            ],
+            selected: {settings.bufferMinutes},
+            onSelectionChanged: (s) => model.setBufferMinutes(s.first),
+          ),
           const SizedBox(height: 32),
           Text('CALENDARS', style: text.labelSmall),
           const SizedBox(height: 12),

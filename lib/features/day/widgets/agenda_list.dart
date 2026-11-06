@@ -3,16 +3,18 @@ import 'package:flutter/material.dart';
 import '../../../core/theme.dart';
 import '../../../core/utils.dart';
 import '../../../models/day_schedule.dart';
+import '../../../models/scheduled_task.dart';
 import '../../../models/task.dart';
 
 /// The day in time order, one line per item, followed by anything that
-/// doesn't fit and anything already finished off the plan.
+/// doesn't fit and anything already finished off the plan. A split
+/// Outcome has one line per session.
 class AgendaList extends StatelessWidget {
   const AgendaList({
     super.key,
     required this.schedule,
     required this.tasks,
-    required this.currentTaskId,
+    required this.current,
     required this.onTap,
   });
 
@@ -21,7 +23,9 @@ class AgendaList extends StatelessWidget {
   /// All tasks on the day — used to list finished floating work, which
   /// the scheduler no longer places.
   final List<Task> tasks;
-  final String? currentTaskId;
+
+  /// The Now card's item (that session is highlighted).
+  final ScheduledTask? current;
   final ValueChanged<Task> onTap;
 
   @override
@@ -51,7 +55,11 @@ class AgendaList extends StatelessWidget {
           _Row(
             time: AppUtils.formatClock(st.startMinutes),
             task: st.task,
-            isCurrent: st.task.id == currentTaskId,
+            minutes: st.durationMinutes,
+            session: st.isSplit ? '${st.part}/${st.parts}' : null,
+            isCurrent:
+                st.task.id == current?.task.id &&
+                st.startMinutes == current?.startMinutes,
             onTap: () => onTap(st.task),
           ),
         if (schedule.overflow.isNotEmpty) ...[
@@ -59,14 +67,26 @@ class AgendaList extends StatelessWidget {
           Text("DOESN'T FIT", style: text.labelSmall),
           const SizedBox(height: 8),
           for (final t in schedule.overflow)
-            _Row(time: '—', task: t, isCurrent: false, onTap: () => onTap(t)),
+            _Row(
+              time: '—',
+              task: t,
+              minutes: t.remainingMinutes,
+              isCurrent: false,
+              onTap: () => onTap(t),
+            ),
         ],
         if (finishedOffPlan.isNotEmpty) ...[
           const SizedBox(height: 24),
           Text('FINISHED', style: text.labelSmall),
           const SizedBox(height: 8),
           for (final t in finishedOffPlan)
-            _Row(time: '', task: t, isCurrent: false, onTap: () => onTap(t)),
+            _Row(
+              time: '',
+              task: t,
+              minutes: t.durationMinutes,
+              isCurrent: false,
+              onTap: () => onTap(t),
+            ),
         ],
       ],
     );
@@ -77,12 +97,20 @@ class _Row extends StatelessWidget {
   const _Row({
     required this.time,
     required this.task,
+    required this.minutes,
     required this.isCurrent,
     required this.onTap,
+    this.session,
   });
 
   final String time;
   final Task task;
+
+  /// Minutes this line covers (one session of a split Outcome).
+  final int minutes;
+
+  /// "1/3" for a session of a split Outcome.
+  final String? session;
   final bool isCurrent;
   final VoidCallback onTap;
 
@@ -144,7 +172,7 @@ class _Row extends StatelessWidget {
               Text(
                 task.status == TaskStatus.inProgress
                     ? 'In progress'
-                    : AppUtils.formatDuration(task.durationMinutes),
+                    : [AppUtils.formatDuration(minutes), ?session].join(' · '),
                 style: text.bodySmall?.copyWith(
                   color: task.status == TaskStatus.inProgress
                       ? colors.accent

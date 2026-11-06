@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/constants.dart';
 import '../models/settings.dart';
 import '../services/settings_repository.dart';
 
@@ -33,6 +34,13 @@ class SettingsModel extends ChangeNotifier {
     _update(
       _settings.copyWith(workdayStartHour: startHour, workdayEndHour: endHour),
     );
+  }
+
+  /// Sets the breathing room between planned items. Ignored unless it is
+  /// one of [AppConstants.bufferChoices].
+  void setBufferMinutes(int minutes) {
+    if (!AppConstants.bufferChoices.contains(minutes)) return;
+    _update(_settings.copyWith(bufferMinutes: minutes));
   }
 
   void _update(Settings next) {

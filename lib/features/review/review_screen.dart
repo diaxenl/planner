@@ -5,6 +5,7 @@ import '../../core/utils.dart';
 import '../../models/task.dart';
 import '../../services/day_stats.dart';
 import '../../state/day_planner_provider.dart';
+import '../day/widgets/day_picker.dart';
 
 /// End-of-day review for the viewed day: Outcomes hit, where the time
 /// went (planned vs actual), estimate accuracy, and an explicit decision
@@ -27,6 +28,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
   late final (int, int) _hit;
   late final TimeSplit _split;
   late final int? _accuracy;
+  late final Future<List<(DateTime, List<Task>)>> _week;
   bool _snapshotTaken = false;
 
   @override
@@ -37,6 +39,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
     _hit = DayStats.outcomesHit(model.tasks);
     _split = DayStats.timeSplit(model.tasks, model.schedule);
     _accuracy = DayStats.estimateAccuracy(model.tasks);
+    _week = model.lastSevenDays();
     _snapshotTaken = true;
   }
 
@@ -50,6 +53,8 @@ class _ReviewScreenState extends State<ReviewScreen> {
     final planned = _split.planned;
     final date = model.viewedDate;
     final isToday = model.isViewingToday;
+    final nextDay = AppUtils.nextWorkday(date);
+    final nextDayLabel = AppUtils.friendlyDate(nextDay, DateTime.now());
 
     final unfinished = model.tasks
         .where(
@@ -159,6 +164,19 @@ class _ReviewScreenState extends State<ReviewScreen> {
           }, style: text.bodyMedium),
           const SizedBox(height: 32),
 
+          // ── Last 7 days ──
+          Text('LAST 7 DAYS', style: text.labelSmall),
+          const SizedBox(height: 12),
+          FutureBuilder<List<(DateTime, List<Task>)>>(
+            future: _week,
+            builder: (context, snapshot) {
+              final days = snapshot.data;
+              if (days == null) return const SizedBox(height: 120);
+              return _WeekSummary(days: days);
+            },
+          ),
+          const SizedBox(height: 32),
+
           // ── Still open ──
           Text(isToday ? 'STILL OPEN' : 'LEFT OVER', style: text.labelSmall),
           const SizedBox(height: 8),
@@ -200,9 +218,17 @@ class _ReviewScreenState extends State<ReviewScreen> {
                     child: const Text('Drop'),
                   ),
                   TextButton(
-                    onPressed: () => _tomorrow(t),
+                    onPressed: () => _moveTo(t, nextDay),
                     style: TextButton.styleFrom(foregroundColor: colors.accent),
-                    child: const Text('Tomorrow'),
+                    child: Text(nextDayLabel),
+                  ),
+                  IconButton(
+                    tooltip: 'Pick a day',
+                    onPressed: () async {
+                      final day = await pickMoveDay(context, date);
+                      if (day != null) await _moveTo(t, day);
+                    },
+                    icon: Icon(Icons.event, color: colors.accent, size: 20),
                   ),
                 ],
               ),
@@ -218,21 +244,21 @@ class _ReviewScreenState extends State<ReviewScreen> {
     _snack('Dropped "${task.title}"', () => model.updateTask(task.id, task));
   }
 
-  Future<void> _tomorrow(Task task) async {
+  Future<void> _moveTo(Task task, DateTime day) async {
     final model = DayPlannerProvider.of(context);
     final from = model.viewedDate;
-    final next = from.add(const Duration(days: 1));
     final index = model.tasks.indexWhere((t) => t.id == task.id);
-    final moved = await model.moveToDate(task.id, next);
+    final moved = await model.moveToDate(task.id, day);
+    final phrase = AppUtils.dayPhrase(day, DateTime.now());
     final lostOutcome = task.isOutcome && moved != null && !moved.isOutcome;
     _snack(
       lostOutcome
-          ? 'Moved "${task.title}" to tomorrow — not as an Outcome, '
-                'tomorrow is full'
-          : 'Moved "${task.title}" to tomorrow',
+          ? 'Moved "${task.title}" to $phrase — not as an Outcome, '
+                'that day is full'
+          : 'Moved "${task.title}" to $phrase',
       () {
         if (model.viewedDate == from) {
-          model.undoMoveToDate(task, next, index: index);
+          model.undoMoveToDate(task, day, index: index);
         }
       },
     );
@@ -319,6 +345,109 @@ class _ReviewScreenState extends State<ReviewScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Outcomes done and the share of working time that went to Outcomes,
+/// for each of the last seven days, with a one-line total.
+class _WeekSummary extends StatelessWidget {
+  const _WeekSummary({required this.days});
+
+  /// Oldest first.
+  final List<(DateTime, List<Task>)> days;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = HyperColors.of(context);
+    final text = Theme.of(context).textTheme;
+
+    var hit = 0, total = 0, outcomeMinutes = 0, worked = 0;
+    for (final (_, tasks) in days) {
+      final (h, t) = DayStats.outcomesHit(tasks);
+      final (o, w) = DayStats.workedMinutes(tasks);
+      hit += h;
+      total += t;
+      outcomeMinutes += o;
+      worked += w;
+    }
+    final share = worked == 0 ? null : (outcomeMinutes * 100 / worked).round();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          total == 0
+              ? 'No outcomes set in the last 7 days.'
+              : '$hit of $total outcomes done'
+                    '${share == null ? '' : ' · $share% of working time to outcomes'}.',
+          style: text.bodyMedium,
+        ),
+        const SizedBox(height: 12),
+        for (final (day, tasks) in days)
+          Builder(
+            builder: (context) {
+              final (h, t) = DayStats.outcomesHit(tasks);
+              final (o, w) = DayStats.workedMinutes(tasks);
+              final dayShare = w == 0 ? 0 : (o * 100 / w).round();
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 40,
+                      child: Text(
+                        AppUtils.weekdayName(day.weekday).substring(0, 3),
+                        style: text.bodySmall,
+                      ),
+                    ),
+                    SizedBox(
+                      width: 44,
+                      child: Text(
+                        t == 0 ? '—' : '$h/$t',
+                        style: text.bodySmall?.copyWith(
+                          color: t > 0 && h == t
+                              ? colors.accent
+                              : colors.textPrimary,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(3),
+                        child: SizedBox(
+                          height: 6,
+                          child: Row(
+                            children: [
+                              if (dayShare > 0)
+                                Expanded(
+                                  flex: dayShare,
+                                  child: Container(color: colors.accent),
+                                ),
+                              if (dayShare < 100)
+                                Expanded(
+                                  flex: 100 - dayShare,
+                                  child: Container(color: colors.hairline),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 48,
+                      child: Text(
+                        w == 0 ? '' : '$dayShare%',
+                        textAlign: TextAlign.right,
+                        style: text.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+      ],
     );
   }
 }

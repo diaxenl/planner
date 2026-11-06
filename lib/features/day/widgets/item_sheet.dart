@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../../../core/constants.dart';
 import '../../../core/theme.dart';
 import '../../../core/utils.dart';
+import '../../../models/recurring_task.dart';
 import '../../../models/task.dart';
+import '../../../services/capture_parser.dart';
 import '../../../state/day_planner_model.dart';
 
 /// Bottom sheet to create, confirm, or edit an item.
@@ -13,8 +15,8 @@ import '../../../state/day_planner_model.dart';
 /// Pops `true` when something was saved or deleted.
 ///
 /// For an existing, unfinished item it also offers Start / Done / Cancel /
-/// Move to tomorrow, gated by status; the sheet closes and [onAction]
-/// performs it (so the caller can offer Undo).
+/// move to the next weekday / Pick a day / Do next, gated by status; the
+/// sheet closes and [onAction] performs it (so the caller can offer Undo).
 class ItemSheet extends StatefulWidget {
   const ItemSheet({
     super.key,
@@ -67,16 +69,17 @@ class ItemSheet extends StatefulWidget {
 }
 
 /// Status actions offered on an existing item.
-enum ItemAction { start, done, cancel, tomorrow }
+enum ItemAction { start, done, cancel, tomorrow, pickDay, doNext }
 
 class _ItemSheetState extends State<ItemSheet> {
-  static const _durationPresets = [15, 30, 45, 60, 90, 120];
+  static const _durationPresets = [15, 30, 45, 60, 90, 120, 180, 240];
 
   late final TextEditingController _title;
   late int _duration;
   late TaskType _type;
   TimeOfDay? _startTime;
   late bool _isOutcome;
+  Repeat? _repeat;
   String? _error;
 
   bool get _isEdit => widget.existing != null;
@@ -90,6 +93,8 @@ class _ItemSheetState extends State<ItemSheet> {
     _type = t?.type ?? TaskType.floating;
     _startTime = t?.startTime;
     _isOutcome = t?.isOutcome ?? false;
+    final existing = widget.existing;
+    _repeat = existing == null ? null : widget.model.repeatOf(existing);
   }
 
   @override
@@ -134,10 +139,8 @@ class _ItemSheetState extends State<ItemSheet> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              existing?.title ?? 'New item',
+              existing == null ? 'New item' : 'Edit item',
               style: text.titleLarge,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
             ),
             if (existing != null) _actions(context, existing),
             const SizedBox(height: 16),
@@ -164,12 +167,13 @@ class _ItemSheetState extends State<ItemSheet> {
                     selected: _duration == m,
                     onTap: () => setState(() => _duration = m),
                   ),
-                if (!_durationPresets.contains(_duration))
-                  _Choice(
-                    label: AppUtils.formatDuration(_duration),
-                    selected: true,
-                    onTap: () {},
-                  ),
+                _Choice(
+                  label: _durationPresets.contains(_duration)
+                      ? 'Other…'
+                      : AppUtils.formatDuration(_duration),
+                  selected: !_durationPresets.contains(_duration),
+                  onTap: _pickDuration,
+                ),
               ],
             ),
             const SizedBox(height: 16),
@@ -225,6 +229,36 @@ class _ItemSheetState extends State<ItemSheet> {
               value: _isOutcome,
               onChanged: atCap ? null : (v) => setState(() => _isOutcome = v),
             ),
+            const SizedBox(height: 8),
+            _label(context, 'REPEAT'),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final (label, value) in [
+                  ('Never', null),
+                  ('Every day', Repeat.daily),
+                  ('Weekdays', Repeat.weekdays),
+                  (
+                    'Every ${AppUtils.weekdayName(widget.model.viewedDate.weekday)}',
+                    Repeat.weekly,
+                  ),
+                ])
+                  _Choice(
+                    label: label,
+                    selected: _repeat == value,
+                    onTap: () => setState(() => _repeat = value),
+                  ),
+              ],
+            ),
+            if (_repeat != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                'A copy is added to each day it repeats on. Changes here '
+                'apply to future copies too.',
+                style: text.bodyMedium,
+              ),
+            ],
             if (_error != null) ...[
               const SizedBox(height: 8),
               Text(
@@ -259,6 +293,16 @@ class _ItemSheetState extends State<ItemSheet> {
       );
     }
     final isMeeting = task.type == TaskType.hard;
+    final model = widget.model;
+    final nextDay = AppUtils.friendlyDate(
+      AppUtils.nextWorkday(model.viewedDate),
+      DateTime.now(),
+    );
+    final canDoNext =
+        notStarted &&
+        task.type == TaskType.floating &&
+        !task.isOutcome &&
+        task.doNextAt == null;
 
     Widget action(String label, ItemAction a) => OutlinedButton(
       style: OutlinedButton.styleFrom(
@@ -281,7 +325,9 @@ class _ItemSheetState extends State<ItemSheet> {
           if (notStarted && !isMeeting) action('Start', ItemAction.start),
           if (!isMeeting) action('Done', ItemAction.done),
           action('Cancel', ItemAction.cancel),
-          if (notStarted) action('Tomorrow', ItemAction.tomorrow),
+          if (canDoNext) action('Do next', ItemAction.doNext),
+          if (notStarted) action(nextDay, ItemAction.tomorrow),
+          if (notStarted) action('Pick a day…', ItemAction.pickDay),
         ],
       ),
     );
@@ -318,6 +364,18 @@ class _ItemSheetState extends State<ItemSheet> {
     child: Text(label, style: Theme.of(context).textTheme.labelSmall),
   );
 
+  /// Any length from 5 minutes to 8 hours (see [_DurationDialog]).
+  Future<void> _pickDuration() async {
+    final minutes = await showDialog<int>(
+      context: context,
+      builder: (_) => _DurationDialog(
+        initial: _durationPresets.contains(_duration) ? null : _duration,
+      ),
+    );
+    if (!mounted || minutes == null) return;
+    setState(() => _duration = minutes);
+  }
+
   Future<void> _pickTime() async {
     final now = TimeOfDay.now();
     final picked = await showTimePicker(
@@ -346,10 +404,12 @@ class _ItemSheetState extends State<ItemSheet> {
     }
 
     final model = widget.model;
+    final String id;
     try {
       if (_isEdit) {
+        id = widget.existing!.id;
         model.updateTask(
-          widget.existing!.id,
+          id,
           widget.existing!.copyWith(
             title: title,
             durationMinutes: _duration,
@@ -360,22 +420,25 @@ class _ItemSheetState extends State<ItemSheet> {
         );
       } else {
         final base = widget.draft;
-        model.addTask(
-          Task(
-            title: title,
-            durationMinutes: _duration,
-            type: _type,
-            startTime: _startTime,
-            isOutcome: _isOutcome,
-            isInterruption: base?.isInterruption ?? false,
-            date: model.viewedDate,
-          ),
+        final task = Task(
+          title: title,
+          durationMinutes: _duration,
+          type: _type,
+          startTime: _startTime,
+          isOutcome: _isOutcome,
+          isInterruption: base?.isInterruption ?? false,
+          date: model.viewedDate,
         );
+        id = task.id;
+        model.addTask(task);
       }
     } on ArgumentError catch (e) {
       setState(() => _error = e.message.toString());
       return;
     }
+    // Starts, updates, or stops the series from the saved fields.
+    final hadRepeat = _isEdit && model.repeatOf(widget.existing!) != null;
+    if (_repeat != null || hadRepeat) model.setRepeat(id, _repeat);
     Navigator.of(context).pop(true);
   }
 
@@ -421,6 +484,67 @@ class _Choice extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Asks for a length typed as "20m", "2h30m" or a number of minutes;
+/// pops the minutes (5 minutes to 8 hours).
+class _DurationDialog extends StatefulWidget {
+  const _DurationDialog({this.initial});
+
+  final int? initial;
+
+  @override
+  State<_DurationDialog> createState() => _DurationDialogState();
+}
+
+class _DurationDialogState extends State<_DurationDialog> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initial == null
+        ? ''
+        : AppUtils.formatDuration(widget.initial!).replaceAll(' ', ''),
+  );
+  String? _error;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final raw = _controller.text.trim().toLowerCase();
+    final value = int.tryParse(raw) ?? CaptureParser.parse(raw).durationMinutes;
+    if (value == null ||
+        value < AppConstants.durationMinMinutes ||
+        value > AppConstants.durationMaxMinutes) {
+      setState(() => _error = 'Enter 5 minutes to 8 hours, e.g. 20m or 2h30m.');
+      return;
+    }
+    Navigator.of(context).pop(value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('How long?'),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        onSubmitted: (_) => _submit(),
+        decoration: InputDecoration(
+          hintText: 'e.g. 20m or 2h30m',
+          errorText: _error,
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(onPressed: _submit, child: const Text('OK')),
+      ],
     );
   }
 }

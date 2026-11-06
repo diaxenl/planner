@@ -6,7 +6,9 @@ import '../../../models/day_schedule.dart';
 import '../../../models/task.dart';
 
 /// The day's Outcomes with check state, when each is scheduled, and an
-/// add affordance while under the cap.
+/// add affordance while under the cap. Open Outcomes are listed in
+/// priority order and can be dragged to reorder ([onReorder]); the first
+/// is planned first.
 class OutcomesList extends StatelessWidget {
   const OutcomesList({
     super.key,
@@ -17,6 +19,7 @@ class OutcomesList extends StatelessWidget {
     required this.onTap,
     required this.onAdd,
     required this.dayLabel,
+    required this.onReorder,
   });
 
   /// Every Outcome on the day, any status.
@@ -27,6 +30,9 @@ class OutcomesList extends StatelessWidget {
   final ValueChanged<Task> onTap;
   final VoidCallback onAdd;
 
+  /// The open Outcomes' ids in their new order.
+  final ValueChanged<List<String>> onReorder;
+
   /// "today", "tomorrow", or "this day" — for the empty prompt.
   final String dayLabel;
 
@@ -36,7 +42,15 @@ class OutcomesList extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     final active = tasks.where((t) => t.status != TaskStatus.cancelled);
     final done = active.where((t) => t.status == TaskStatus.complete).length;
-    final ordered = _ordered();
+    final open = [
+      for (final t in tasks)
+        if (t.status != TaskStatus.complete && t.status != TaskStatus.cancelled)
+          t,
+    ];
+    final finished = [
+      for (final t in tasks)
+        if (!open.contains(t)) t,
+    ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -56,7 +70,28 @@ class OutcomesList extends StatelessWidget {
         if (tasks.isEmpty)
           _AddRow(label: 'What would make $dayLabel a win?', onTap: onAdd)
         else ...[
-          for (final t in ordered) _row(context, t),
+          ReorderableListView(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            buildDefaultDragHandles: false,
+            onReorderItem: (oldIndex, newIndex) {
+              final ids = [for (final t in open) t.id];
+              ids.insert(newIndex, ids.removeAt(oldIndex));
+              onReorder(ids);
+            },
+            children: [
+              for (var i = 0; i < open.length; i++)
+                KeyedSubtree(
+                  key: ValueKey(open[i].id),
+                  child: _row(
+                    context,
+                    open[i],
+                    dragIndex: open.length > 1 ? i : null,
+                  ),
+                ),
+            ],
+          ),
+          for (final t in finished) _row(context, t),
           if (active.length < cap)
             _AddRow(label: 'Add an outcome', onTap: onAdd),
         ],
@@ -64,30 +99,17 @@ class OutcomesList extends StatelessWidget {
     );
   }
 
-  /// Next up first: scheduled by start time, then ones that don't fit,
-  /// then finished ones.
-  List<Task> _ordered() {
-    int rank(Task t) {
-      if (t.status == TaskStatus.complete || t.status == TaskStatus.cancelled) {
-        return 1 << 20;
-      }
-      final placed = schedule.committed
-          .where((st) => st.task.id == t.id)
-          .firstOrNull;
-      return placed?.startMinutes ?? (1 << 19);
-    }
-
-    return [...tasks]..sort((a, b) => rank(a).compareTo(rank(b)));
-  }
-
-  Widget _row(BuildContext context, Task task) {
+  /// One Outcome. [dragIndex] (open Outcomes, when there are several)
+  /// adds a drag handle.
+  Widget _row(BuildContext context, Task task, {int? dragIndex}) {
     final colors = HyperColors.of(context);
     final text = Theme.of(context).textTheme;
     final isDone = task.status == TaskStatus.complete;
     final isCancelled = task.status == TaskStatus.cancelled;
-    final placed = schedule.committed
+    final sessions = schedule.committed
         .where((st) => st.task.id == task.id)
-        .firstOrNull;
+        .toList();
+    final placed = sessions.firstOrNull;
     final overflowing = schedule.overflow.any((t) => t.id == task.id);
 
     final String when;
@@ -99,11 +121,16 @@ class OutcomesList extends StatelessWidget {
           ? 'Done · took ${AppUtils.formatDuration(task.actualDurationMinutes!)}'
           : 'Done';
     } else if (overflowing) {
-      when = "Doesn't fit — shorten it or move it to tomorrow";
+      when = "Doesn't fit, even split up — shorten it or move it";
+    } else if (placed != null && placed.isSplit) {
+      final total = sessions.fold<int>(0, (m, st) => m + st.durationMinutes);
+      when =
+          '${AppUtils.formatClock(placed.startMinutes)}'
+          ' · ${AppUtils.formatDuration(total)} in ${placed.parts} sessions';
     } else if (placed != null) {
       when =
           '${AppUtils.formatClock(placed.startMinutes)}'
-          ' · ${AppUtils.formatDuration(task.durationMinutes)}';
+          ' · ${AppUtils.formatDuration(placed.durationMinutes)}';
     } else {
       when = AppUtils.formatDuration(task.durationMinutes);
     }
@@ -159,6 +186,17 @@ class OutcomesList extends StatelessWidget {
                 ],
               ),
             ),
+            if (dragIndex != null)
+              ReorderableDragStartListener(
+                index: dragIndex,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: Tooltip(
+                    message: 'Drag to reorder',
+                    child: Icon(Icons.drag_indicator, color: colors.textMuted),
+                  ),
+                ),
+              ),
           ],
         ),
       ),

@@ -32,6 +32,18 @@ class AppConstants {
   /// How often to re-check for task overruns while a task is in progress.
   static const Duration overrunCheckInterval = Duration(seconds: 30);
 
+  /// Shortest session an Outcome is split into when it doesn't fit one
+  /// free gap.
+  static const int minSessionMinutes = 30;
+
+  /// Breathing room (Settings) kept between planned items, in minutes.
+  static const List<int> bufferChoices = [0, 5, 10, 15];
+  static const int defaultBufferMinutes = 5;
+
+  /// How long before a meeting the Now card warns that the running task
+  /// is about to run into it.
+  static const int meetingWarningMinutes = 5;
+
   // ── Outcomes ────────────────────────────────────────────────────────
   /// Default and allowed range for the daily outcome cap (Settings).
   static const int defaultOutcomeCap = 3;

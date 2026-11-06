@@ -56,6 +56,8 @@ class Task {
     this.actualDurationMinutes,
     required this.date,
     this.carriedFromDate,
+    this.doNextAt,
+    this.recurringId,
   }) : id = id ?? _generateId();
 
   /// Unique identifier — 16-character hex string.
@@ -106,6 +108,21 @@ class Task {
   /// `null` for tasks created on their native day.
   final DateTime? carriedFromDate;
 
+  /// When the user chose "Do next" for this task. Floating work marked
+  /// this way is planned before everything else, latest choice first.
+  final DateTime? doNextAt;
+
+  /// The repeating series this task was created from, or `null` for a
+  /// one-off task. See `RecurringTask`.
+  final String? recurringId;
+
+  /// Minutes still to plan: the estimate minus minutes already tracked on
+  /// earlier, paused runs (never less than 5).
+  int get remainingMinutes {
+    final left = durationMinutes - (actualDurationMinutes ?? 0);
+    return left < 5 ? 5 : left;
+  }
+
   /// Returns a new [Task] with the given fields replaced.
   Task copyWith({
     String? id,
@@ -121,6 +138,8 @@ class Task {
     int? Function()? actualDurationMinutes,
     DateTime? date,
     DateTime? Function()? carriedFromDate,
+    DateTime? Function()? doNextAt,
+    String? Function()? recurringId,
   }) {
     return Task(
       id: id ?? this.id,
@@ -140,6 +159,8 @@ class Task {
       carriedFromDate: carriedFromDate != null
           ? carriedFromDate()
           : this.carriedFromDate,
+      doNextAt: doNextAt != null ? doNextAt() : this.doNextAt,
+      recurringId: recurringId != null ? recurringId() : this.recurringId,
     );
   }
 
@@ -189,6 +210,8 @@ class Task {
       'actualDurationMinutes': actualDurationMinutes,
       'date': date.toIso8601String(),
       'carriedFromDate': carriedFromDate?.toIso8601String(),
+      'doNextAt': doNextAt?.toIso8601String(),
+      'recurringId': recurringId,
     };
   }
 
@@ -223,6 +246,10 @@ class Task {
       final carriedFromDate = json['carriedFromDate'] == null
           ? null
           : DateTime.parse(json['carriedFromDate'] as String);
+      final doNextAt = json['doNextAt'] == null
+          ? null
+          : DateTime.parse(json['doNextAt'] as String);
+      final recurringId = json['recurringId'] as String?;
 
       return Task(
         id: id,
@@ -238,6 +265,8 @@ class Task {
         actualDurationMinutes: actualDurationMinutes,
         date: date,
         carriedFromDate: carriedFromDate,
+        doNextAt: doNextAt,
+        recurringId: recurringId,
       );
     } catch (_) {
       return null;

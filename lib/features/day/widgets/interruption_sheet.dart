@@ -5,18 +5,23 @@ import '../../../core/theme.dart';
 /// Where an interruption goes.
 enum InterruptionChoice { now, laterToday, tomorrow }
 
-/// "Something came up": type it, then decide Now / Later today / Tomorrow.
+/// "Something came up": type it, then decide Now / Later today / Tomorrow
+/// (the next weekday, labelled [laterLabel], e.g. "Monday" on a Friday).
 /// Pops `(text, choice)` or `null` if dismissed.
 class InterruptionSheet extends StatefulWidget {
-  const InterruptionSheet({super.key});
+  const InterruptionSheet({super.key, this.laterLabel = 'Tomorrow'});
 
-  static Future<(String, InterruptionChoice)?> show(BuildContext context) =>
-      showModalBottomSheet<(String, InterruptionChoice)>(
-        context: context,
-        isScrollControlled: true,
-        useSafeArea: true,
-        builder: (_) => const InterruptionSheet(),
-      );
+  final String laterLabel;
+
+  static Future<(String, InterruptionChoice)?> show(
+    BuildContext context, {
+    String laterLabel = 'Tomorrow',
+  }) => showModalBottomSheet<(String, InterruptionChoice)>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    builder: (_) => InterruptionSheet(laterLabel: laterLabel),
+  );
 
   @override
   State<InterruptionSheet> createState() => _InterruptionSheetState();
@@ -86,7 +91,7 @@ class _InterruptionSheetState extends State<InterruptionSheet> {
               Expanded(
                 child: OutlinedButton(
                   onPressed: () => _choose(InterruptionChoice.tomorrow),
-                  child: const Text('Tomorrow'),
+                  child: Text(widget.laterLabel),
                 ),
               ),
             ],

@@ -118,6 +118,21 @@ Summarized; see git history for the full itemized checklists.
 - [x] Changing the workday replans; work that no longer fits is reported
 - [x] Tests: settings JSON, scheduler window, model replan and validation
 
+## Phase 17 — Persona Review Round 4 Fixes
+Owner approved implementing the round-4 feedback as one phase (2026-11-05). Out of scope (need a new package or new permission approval): reminders / home-screen widget, writing Outcome time to the phone's calendar.
+- [x] Scheduler: an Outcome that doesn't fit one free gap is split into sessions (≥ 30m each, earliest gaps first); other work is never split. Agenda shows one line per session ("1/3"); Outcomes list shows "10:00 AM · 2h in 3 sessions"
+- [x] Scheduler: a running Outcome stops at the next meeting; the rest is planned as later sessions. Minutes tracked before a pause are not planned again
+- [x] Now card: a meeting or set-time item that has started takes the card while a task runs, with "“X” is still running" + Pause (Undo); a running task warns 5 minutes before the next one
+- [x] Capture parser: a time counts only after "at"/"@" or in the closing run of shorthand ("Email team re 2pm meeting" stays a title); "at 3" and "3:30" read inside the workday; `today` / `tomorrow` / weekday names (closing run or after "on") add the item to that day, with a Show shortcut; `*` only alone or at either end
+- [x] Tomorrow → next weekday (Friday → Monday) in the item sheet, Review, and "Something came up"; "Pick a day…" (date picker) in the item sheet and Review
+- [x] Reordering: drag Outcomes to set priority (first is planned first); "Do next" on other unscheduled work puts it before everything else (latest choice first), with Undo
+- [x] Breathing room setting (None / 5m / 10m / 15m, default 5m) around meetings and between planned work; skipped on a day too full for it (when it would push work out)
+- [x] Item sheet: heading "Edit item" (title shown once); lengths up to 4h plus "Other…" (any 5m–8h, e.g. "2h30m")
+- [x] Repeating tasks: Repeat Never / Every day / Weekdays / Every <weekday> in the item sheet; series saved in `recurring.json`; a copy is added to each day it repeats on (today or later) as that day is opened; deleting or moving a copy keeps that day free of it; edits to a repeating item apply to future copies
+- [x] Review: "Last 7 days" — outcomes done and share of working time to outcomes, per day and in total
+- [x] Tests: `phase17_scheduler_test.dart`, `phase17_test.dart`, `phase17_widget_test.dart`
+- [ ] Validation: persona re-run of round 4 in the running app (harness in `tool/`)
+
 ---
 
-**Current status:** Engine (Phases 1–9) complete. Phases 10–13, 15 and 16 complete. Phase 14 code complete with `device_calendar` 4.3.3 (owner-approved 2026-11-05); **remaining: Android SDK install (+ Windows Developer Mode for plugin builds) and a real-device check with Google, Microsoft and iCloud accounts.**
+**Current status:** Engine (Phases 1–9) complete. Phases 10–13, 15, 16 and 17 complete (17 awaiting a live persona re-run). Phase 14 code complete with `device_calendar` 4.3.3 (owner-approved 2026-11-05); **remaining: Android SDK install (+ Windows Developer Mode for plugin builds) and a real-device check with Google, Microsoft and iCloud accounts.**

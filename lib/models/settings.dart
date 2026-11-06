@@ -10,6 +10,7 @@ class Settings {
     this.selectedCalendarIds,
     this.workdayStartHour = AppConstants.defaultWorkdayStartHour,
     this.workdayEndHour = AppConstants.defaultWorkdayEndHour,
+    this.bufferMinutes = AppConstants.defaultBufferMinutes,
   });
 
   /// Dark by default.
@@ -27,6 +28,10 @@ class Settings {
   final int workdayStartHour;
   final int workdayEndHour;
 
+  /// Breathing room kept between planned items, one of
+  /// [AppConstants.bufferChoices].
+  final int bufferMinutes;
+
   /// Whether [start]–[end] is a valid workday.
   static bool isValidWorkday(int start, int end) =>
       start >= 0 && end <= 24 && start < end;
@@ -37,6 +42,7 @@ class Settings {
     Set<String>? Function()? selectedCalendarIds,
     int? workdayStartHour,
     int? workdayEndHour,
+    int? bufferMinutes,
   }) {
     return Settings(
       themeMode: themeMode ?? this.themeMode,
@@ -46,6 +52,7 @@ class Settings {
           : this.selectedCalendarIds,
       workdayStartHour: workdayStartHour ?? this.workdayStartHour,
       workdayEndHour: workdayEndHour ?? this.workdayEndHour,
+      bufferMinutes: bufferMinutes ?? this.bufferMinutes,
     );
   }
 
@@ -55,6 +62,7 @@ class Settings {
     'selectedCalendarIds': selectedCalendarIds?.toList(),
     'workdayStartHour': workdayStartHour,
     'workdayEndHour': workdayEndHour,
+    'bufferMinutes': bufferMinutes,
   };
 
   /// Lenient: any missing or invalid field falls back to its default.
@@ -67,6 +75,7 @@ class Settings {
     final ids = json['selectedCalendarIds'];
     final start = json['workdayStartHour'];
     final end = json['workdayEndHour'];
+    final buffer = json['bufferMinutes'];
     final validWorkday =
         start is int && end is int && isValidWorkday(start, end);
     return Settings(
@@ -80,6 +89,10 @@ class Settings {
       selectedCalendarIds: ids is List ? ids.whereType<String>().toSet() : null,
       workdayStartHour: validWorkday ? start : defaults.workdayStartHour,
       workdayEndHour: validWorkday ? end : defaults.workdayEndHour,
+      bufferMinutes:
+          buffer is int && AppConstants.bufferChoices.contains(buffer)
+          ? buffer
+          : defaults.bufferMinutes,
     );
   }
 }

@@ -15,6 +15,7 @@ import '../settings/settings_screen.dart';
 import 'widgets/agenda_list.dart';
 import 'widgets/capture_bar.dart';
 import 'widgets/day_header.dart';
+import 'widgets/day_picker.dart';
 import 'widgets/interruption_sheet.dart';
 import 'widgets/item_sheet.dart';
 import 'widgets/load_bar.dart';
@@ -135,6 +136,12 @@ class _DayScreenState extends State<DayScreen> {
                               _act(ItemAction.cancel, current!.task),
                           onTap: () => _edit(model, current!.task),
                           onReview: () => ReviewScreen.open(context),
+                          running: model.runningBehindCurrent,
+                          startingSoon: model.fixedItemStartingSoon,
+                          onPause: () {
+                            final running = model.runningBehindCurrent;
+                            if (running != null) _pause(model, running.task);
+                          },
                         ),
                       ],
                       const SizedBox(height: 28),
@@ -147,6 +154,7 @@ class _DayScreenState extends State<DayScreen> {
                             : dayLabel,
                         onDone: (t) => _act(ItemAction.done, t),
                         onTap: (t) => _edit(model, t),
+                        onReorder: model.reorderOutcomes,
                         onAdd: () => ItemSheet.show(
                           context,
                           model: model,
@@ -163,7 +171,7 @@ class _DayScreenState extends State<DayScreen> {
                       AgendaList(
                         schedule: model.schedule,
                         tasks: model.tasks,
-                        currentTaskId: current?.task.id,
+                        current: current,
                         onTap: (t) => _edit(model, t),
                       ),
                     ],
@@ -189,14 +197,25 @@ class _DayScreenState extends State<DayScreen> {
     );
   }
 
+  /// Parses capture shorthand, reading day words from today and times
+  /// without am/pm against the workday.
+  ParsedCapture _parse(DayPlannerModel model, String raw) =>
+      CaptureParser.parse(
+        raw,
+        today: DateTime.now(),
+        workdayStartHour: model.workdayStartHour,
+        workdayEndHour: model.workdayEndHour,
+      );
+
   /// Builds a task from capture shorthand: parsed duration (default 30m),
-  /// a parsed time makes it Set-time, `*` makes it an Outcome.
+  /// a parsed time makes it Set-time, `*` makes it an Outcome. The day
+  /// named in the text is ignored here (see [_capture]).
   Task _fromCapture(
     DayPlannerModel model,
     String raw, {
     bool interruption = false,
   }) {
-    final p = CaptureParser.parse(raw);
+    final p = _parse(model, raw);
     return Task(
       title: p.title.isEmpty ? raw.trim() : p.title,
       durationMinutes: p.durationMinutes ?? 30,
@@ -212,6 +231,11 @@ class _DayScreenState extends State<DayScreen> {
   /// rejects it (overlap, cap, out of range), opens the sheet to fix it.
   void _capture(DayPlannerModel model, String raw) {
     final task = _fromCapture(model, raw);
+    final date = _parse(model, raw).date;
+    if (date != null && date != model.viewedDate) {
+      _captureToDay(model, task, date);
+      return;
+    }
     try {
       model.addTask(task);
     } on ArgumentError {
@@ -233,8 +257,46 @@ class _DayScreenState extends State<DayScreen> {
     );
   }
 
+  /// Adds a captured item to another day ("Book flight 9am Friday"),
+  /// with a shortcut to that day. If that day can't take it (overlap,
+  /// out of range), goes there and opens the sheet to fix it.
+  Future<void> _captureToDay(
+    DayPlannerModel model,
+    Task task,
+    DateTime date,
+  ) async {
+    final Task saved;
+    try {
+      saved = await model.addTaskToDate(task, date);
+    } on ArgumentError {
+      await model.setViewedDate(date);
+      if (!mounted) return;
+      ItemSheet.show(
+        context,
+        model: model,
+        draft: task.copyWith(date: model.viewedDate),
+      );
+      return;
+    }
+    final day = AppUtils.dayPhrase(date, DateTime.now());
+    final lostOutcome = task.isOutcome && !saved.isOutcome;
+    _snack(
+      lostOutcome
+          ? 'Added "${task.title}" to $day — not as an Outcome, that day is full'
+          : 'Added "${task.title}" to $day · ${_describe(saved)}',
+      actionLabel: 'Show',
+      onAction: () => model.setViewedDate(date),
+    );
+  }
+
   Future<void> _somethingCameUp(DayPlannerModel model) async {
-    final result = await InterruptionSheet.show(context);
+    final result = await InterruptionSheet.show(
+      context,
+      laterLabel: AppUtils.friendlyDate(
+        AppUtils.nextWorkday(model.viewedDate),
+        DateTime.now(),
+      ),
+    );
     if (result == null || !mounted) return;
     final (raw, choice) = result;
     final parsed = _fromCapture(model, raw, interruption: true);
@@ -321,24 +383,51 @@ class _DayScreenState extends State<DayScreen> {
           undo: () => model.updateTask(task.id, task),
         );
       case ItemAction.tomorrow:
-        final from = model.viewedDate;
-        final next = from.add(const Duration(days: 1));
-        final index = model.tasks.indexWhere((t) => t.id == task.id);
-        final moved = await model.moveToDate(task.id, next);
-        final lostOutcome = task.isOutcome && moved != null && !moved.isOutcome;
+        await _moveTo(model, task, AppUtils.nextWorkday(model.viewedDate));
+      case ItemAction.pickDay:
+        final day = await pickMoveDay(context, model.viewedDate);
+        if (day != null) await _moveTo(model, task, day);
+      case ItemAction.doNext:
+        model.updateTask(
+          task.id,
+          task.copyWith(doNextAt: () => DateTime.now()),
+        );
         _snack(
-          lostOutcome
-              ? 'Moved "${task.title}" to tomorrow — not as an Outcome, '
-                    'tomorrow is full'
-              : 'Moved "${task.title}" to tomorrow',
-          undo: () {
-            // Only meaningful while still on the day it came from.
-            if (model.viewedDate == from) {
-              model.undoMoveToDate(task, next, index: index);
-            }
-          },
+          'Doing "${task.title}" next',
+          undo: () => model.updateTask(task.id, task),
         );
     }
+  }
+
+  /// Moves [task] to [day] with Undo.
+  Future<void> _moveTo(DayPlannerModel model, Task task, DateTime day) async {
+    final from = model.viewedDate;
+    final index = model.tasks.indexWhere((t) => t.id == task.id);
+    final moved = await model.moveToDate(task.id, day);
+    final phrase = AppUtils.dayPhrase(day, DateTime.now());
+    final lostOutcome = task.isOutcome && moved != null && !moved.isOutcome;
+    _snack(
+      lostOutcome
+          ? 'Moved "${task.title}" to $phrase — not as an Outcome, '
+                'that day is full'
+          : 'Moved "${task.title}" to $phrase',
+      undo: () {
+        // Only meaningful while still on the day it came from.
+        if (model.viewedDate == from) {
+          model.undoMoveToDate(task, day, index: index);
+        }
+      },
+    );
+  }
+
+  /// Pauses a running task (minutes tracked so far are kept), with Undo.
+  void _pause(DayPlannerModel model, Task task) {
+    final before = model.pauseTask(task.id);
+    if (before == null) return;
+    _snack(
+      'Paused "${task.title}"',
+      undo: () => model.updateTask(before.id, before),
+    );
   }
 
   void _snack(
