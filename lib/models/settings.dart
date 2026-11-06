@@ -8,6 +8,8 @@ class Settings {
     this.themeMode = ThemeMode.dark,
     this.outcomeCap = AppConstants.defaultOutcomeCap,
     this.selectedCalendarIds,
+    this.workdayStartHour = AppConstants.defaultWorkdayStartHour,
+    this.workdayEndHour = AppConstants.defaultWorkdayEndHour,
   });
 
   /// Dark by default.
@@ -20,10 +22,21 @@ class Settings {
   /// Calendars to import meetings from. `null` means all calendars.
   final Set<String>? selectedCalendarIds;
 
+  /// Workday hours (0–24, start before end). Work is planned only inside
+  /// them.
+  final int workdayStartHour;
+  final int workdayEndHour;
+
+  /// Whether [start]–[end] is a valid workday.
+  static bool isValidWorkday(int start, int end) =>
+      start >= 0 && end <= 24 && start < end;
+
   Settings copyWith({
     ThemeMode? themeMode,
     int? outcomeCap,
     Set<String>? Function()? selectedCalendarIds,
+    int? workdayStartHour,
+    int? workdayEndHour,
   }) {
     return Settings(
       themeMode: themeMode ?? this.themeMode,
@@ -31,6 +44,8 @@ class Settings {
       selectedCalendarIds: selectedCalendarIds != null
           ? selectedCalendarIds()
           : this.selectedCalendarIds,
+      workdayStartHour: workdayStartHour ?? this.workdayStartHour,
+      workdayEndHour: workdayEndHour ?? this.workdayEndHour,
     );
   }
 
@@ -38,6 +53,8 @@ class Settings {
     'themeMode': themeMode.name,
     'outcomeCap': outcomeCap,
     'selectedCalendarIds': selectedCalendarIds?.toList(),
+    'workdayStartHour': workdayStartHour,
+    'workdayEndHour': workdayEndHour,
   };
 
   /// Lenient: any missing or invalid field falls back to its default.
@@ -48,6 +65,10 @@ class Settings {
         .firstOrNull;
     final cap = json['outcomeCap'];
     final ids = json['selectedCalendarIds'];
+    final start = json['workdayStartHour'];
+    final end = json['workdayEndHour'];
+    final validWorkday =
+        start is int && end is int && isValidWorkday(start, end);
     return Settings(
       themeMode: themeMode ?? defaults.themeMode,
       outcomeCap:
@@ -57,6 +78,8 @@ class Settings {
           ? cap
           : defaults.outcomeCap,
       selectedCalendarIds: ids is List ? ids.whereType<String>().toSet() : null,
+      workdayStartHour: validWorkday ? start : defaults.workdayStartHour,
+      workdayEndHour: validWorkday ? end : defaults.workdayEndHour,
     );
   }
 }

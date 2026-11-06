@@ -83,7 +83,7 @@ Summarized; see git history for the full itemized checklists.
 
 ## Phase 14 — Calendar Import
 - [ ] **Prerequisite:** Android SDK installed and `flutter doctor` Android toolchain green
-- [ ] **Stop and confirm with the owner** the exact calendar package and version (candidate: `device_calendar`) before touching `pubspec.yaml`
+- [x] Owner approved `device_calendar` 4.3.3 (2026-11-05)
 - [ ] Add the confirmed package; add Android calendar read permission (and iOS usage description)
 - [x] `models/calendar_event.dart`: read-only (id, calendarId, title, start, end, isAllDay)
 - [x] `services/calendar_source.dart`: `CalendarSource` interface (`listCalendars()`, `eventsFor(date, calendarIds)`); `DeviceCalendarSource`; `NoCalendarSource` for desktop/web/tests
@@ -109,6 +109,13 @@ Summarized; see git history for the full itemized checklists.
 - [x] R3 fix: shared bar scale + one-line answer ("X% of your working time went to outcomes"); "Still open" mid-day
 - [x] R3 fix: Undo after Delete/Tomorrow restores the original position (Outcome order kept)
 - [x] R3 fix: duration range enforced in the model (capture can't create 0m / 10h items); load-bar header can't overflow; light-theme contrast
+
+## Phase 16 — Workday Hours
+- [x] Settings: workday start/end hours (default 8 AM – 6 PM), persisted; lenient JSON (invalid pair → default)
+- [x] Floating work is planned, and free time counted, only inside the workday; meetings and set-time items may sit anywhere in the day (must end by midnight)
+- [x] Scheduler: fixed blocks outside the window never open up gaps
+- [x] Changing the workday replans; work that no longer fits is reported
+- [x] Tests: settings JSON, scheduler window, model replan and validation
 
 ---
 

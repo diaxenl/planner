@@ -80,6 +80,25 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
   /// Maximum number of Outcomes per day. Owned by settings; defaults to 3.
   int outcomeCap = 3;
 
+  int _workdayStartHour = AppConstants.defaultWorkdayStartHour;
+  int _workdayEndHour = AppConstants.defaultWorkdayEndHour;
+
+  /// Workday hours, owned by settings. Floating work is planned, and free
+  /// time counted, only inside them; meetings and set-time items may sit
+  /// anywhere in the day.
+  int get workdayStartHour => _workdayStartHour;
+  int get workdayEndHour => _workdayEndHour;
+
+  /// Changes the workday and replans. Work that no longer fits is
+  /// reported as a suggestion.
+  void setWorkday(int startHour, int endHour) {
+    if (startHour == _workdayStartHour && endHour == _workdayEndHour) return;
+    _workdayStartHour = startHour;
+    _workdayEndHour = endHour;
+    _rescheduleAndDiff();
+    notifyListeners();
+  }
+
   bool _isLoading = false;
 
   /// True while an async load is in progress.
@@ -493,7 +512,7 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
   /// Re-runs the scheduling engine on the current task list.
   void _reschedule() {
     final nowMinutes = _nowMinutesForViewedDay;
-    _releaseInvalidHolds(nowMinutes ?? AppConstants.dayStartHour * 60);
+    _releaseInvalidHolds(nowMinutes ?? _workdayStartHour * 60);
 
     // Held tasks are handed to the scheduler as pinned at their held start,
     // then mapped back to the real (floating) task in the result.
@@ -508,8 +527,8 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
                 )
               : t,
       ],
-      dayStartHour: AppConstants.dayStartHour,
-      dayEndHour: AppConstants.dayEndHour,
+      dayStartHour: _workdayStartHour,
+      dayEndHour: _workdayEndHour,
       nowMinutes: nowMinutes,
     );
 
@@ -764,13 +783,12 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     final newStart = _toMinutes(task.startTime!);
     final newEnd = newStart + task.durationMinutes;
 
-    final dayStart = AppConstants.dayStartHour * 60;
-    final dayEnd = AppConstants.dayEndHour * 60;
-    if (newStart < dayStart || newEnd > dayEnd) {
+    // Fixed items may sit outside the workday (an early call, a dinner),
+    // but must end by midnight.
+    if (newEnd > 24 * 60) {
       throw ArgumentError(
-        '${AppUtils.formatClock(newStart)}–${AppUtils.formatClock(newEnd)} '
-        'is outside your day (${AppUtils.formatClock(dayStart)}–'
-        '${AppUtils.formatClock(dayEnd)}).',
+        '${AppUtils.formatClock(newStart)} + '
+        '${AppUtils.formatDuration(task.durationMinutes)} runs past midnight.',
       );
     }
 

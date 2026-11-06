@@ -27,6 +27,14 @@ class SettingsModel extends ChangeNotifier {
   void setSelectedCalendarIds(Set<String>? ids) =>
       _update(_settings.copyWith(selectedCalendarIds: () => ids));
 
+  /// Sets the workday hours. Ignored unless start is before end.
+  void setWorkday(int startHour, int endHour) {
+    if (!Settings.isValidWorkday(startHour, endHour)) return;
+    _update(
+      _settings.copyWith(workdayStartHour: startHour, workdayEndHour: endHour),
+    );
+  }
+
   void _update(Settings next) {
     _settings = next;
     _repository?.save(next);

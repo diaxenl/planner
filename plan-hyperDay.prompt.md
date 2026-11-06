@@ -123,7 +123,7 @@ Any of these can be proposed later as a new phase; none are implied by this docu
 ## Approved Dependencies
 
 - `path_provider` — existing, unchanged.
-- **Calendar access package** — approved in principle by the owner (2026-11-05) for the Calendar Import phase. Candidate: `device_calendar` (Android + iOS, reads the on-device store). **The exact package and version must be confirmed with the owner immediately before it is added.** Nothing is added before that phase.
+- **`device_calendar` 4.3.3** — approved by the owner (2026-11-05) for Calendar Import (Android + iOS, reads the on-device store). Brings `sprintf` and `timezone` transitively.
 - Bundled font file — asset only, no package.
 
 No other packages may be added without explicit approval (see `AGENTS.md`).
@@ -134,7 +134,8 @@ No other packages may be added without explicit approval (see `AGENTS.md`).
 
 - **Title:** required, 1–100 characters, trimmed.
 - **Duration:** required, integer, 5–480 minutes.
-- **Time:** start and end within the day window (6:00 AM – 11:00 PM).
+- **Workday:** Settings → Workday sets start and end hours (default 8 AM – 6 PM, whole hours, start before end). Floating work is planned, and free time counted, only inside the workday. Meetings and set-time items may sit anywhere in the day (an early call, a dinner).
+- **Time:** a fixed item must end by midnight.
 - **Overlap:** fixed-time items (Meetings, user-created or imported, and At-a-set-time items) may not overlap each other. Completed/cancelled items no longer hold their slot. Imported meetings may overlap each other (double-booking happens; the calendar is the source of truth).
 - **Outcomes:** at most the user's outcome cap per day (default 3, Settings 1–5); completed Outcomes still count (it's a per-day commitment). Exceeding it is rejected with a clear message. Editing an existing Outcome is always allowed, so lowering the cap never locks today's Outcomes.
 - **Status transitions:** unchanged — Start only from `notStarted`; Done from `notStarted` (zero tracked time) or `inProgress`; Cancel from `notStarted` or `inProgress`.

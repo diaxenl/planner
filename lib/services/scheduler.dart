@@ -103,12 +103,15 @@ class Scheduler {
     ];
 
     // ── 3. Compute free gaps ──────────────────────────────────────────
+    // Gaps lie inside the day window only; fixed blocks outside it (an
+    // early call, an evening event) are kept but never open up space.
     final gaps = <_Gap>[];
     var cursor = dayStartMin;
 
     for (final block in fixedBlocks) {
-      if (block.startMin > cursor) {
-        gaps.add(_Gap(startMin: cursor, endMin: block.startMin));
+      final gapEnd = block.startMin < dayEndMin ? block.startMin : dayEndMin;
+      if (gapEnd > cursor) {
+        gaps.add(_Gap(startMin: cursor, endMin: gapEnd));
       }
       if (block.endMin > cursor) {
         cursor = block.endMin;

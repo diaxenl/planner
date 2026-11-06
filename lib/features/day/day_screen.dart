@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../core/constants.dart';
 import '../../core/utils.dart';
 import '../../models/task.dart';
 import '../../services/capture_parser.dart';
@@ -73,9 +72,9 @@ class _DayScreenState extends State<DayScreen> {
       model.schedule,
       nowMinutes: isToday
           ? now.hour * 60 + now.minute
-          : AppConstants.dayStartHour * 60,
-      dayStartHour: AppConstants.dayStartHour,
-      dayEndHour: AppConstants.dayEndHour,
+          : model.workdayStartHour * 60,
+      dayStartHour: model.workdayStartHour,
+      dayEndHour: model.workdayEndHour,
     );
 
     return AnnotatedRegion<SystemUiOverlayStyle>(

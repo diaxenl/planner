@@ -5,12 +5,12 @@
 class AppConstants {
   AppConstants._();
 
-  // ── Day window ──────────────────────────────────────────────────────
-  /// Start of the plannable day window (inclusive).
-  static const int dayStartHour = 6;
-
-  /// End of the plannable day window (exclusive).
-  static const int dayEndHour = 23; // 11 PM
+  // ── Workday ─────────────────────────────────────────────────────────
+  /// Default workday (Settings): work is planned, and free time counted,
+  /// only between these hours. Meetings and set-time items may sit
+  /// anywhere in the day.
+  static const int defaultWorkdayStartHour = 8;
+  static const int defaultWorkdayEndHour = 18; // 6 PM
 
   // ── Spacing ─────────────────────────────────────────────────────────
   static const double paddingSmall = 4.0;

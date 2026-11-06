@@ -15,9 +15,17 @@ void main() async {
 
   final model = DayPlannerModel(repository: LocalDayRepository())
     ..outcomeCap = settings.settings.outcomeCap
-    ..calendarIds = settings.settings.selectedCalendarIds;
+    ..calendarIds = settings.settings.selectedCalendarIds
+    ..setWorkday(
+      settings.settings.workdayStartHour,
+      settings.settings.workdayEndHour,
+    );
   settings.addListener(() {
     model.outcomeCap = settings.settings.outcomeCap;
+    model.setWorkday(
+      settings.settings.workdayStartHour,
+      settings.settings.workdayEndHour,
+    );
     final ids = settings.settings.selectedCalendarIds;
     if (ids != model.calendarIds) {
       model.calendarIds = ids;

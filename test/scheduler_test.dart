@@ -188,4 +188,34 @@ void main() {
       expect(_startOf(s, long), 9 * 60 + 15);
     });
   });
+
+  group('Workday window', () {
+    test('fixed blocks outside the window never open up space', () {
+      final evening = Task(
+        title: 'Dinner',
+        durationMinutes: 60,
+        type: TaskType.hard,
+        startTime: const TimeOfDay(hour: 19, minute: 0),
+        date: _day,
+      );
+      final work = Task(
+        title: 'Work',
+        durationMinutes: 60,
+        type: TaskType.floating,
+        date: _day,
+      );
+
+      final s = Scheduler.schedule(
+        [evening, work],
+        dayStartHour: 9,
+        dayEndHour: 17,
+        nowMinutes: 16 * 60 + 30,
+      );
+
+      // Only 30 minutes are left in the workday; the evening slot before
+      // dinner is not workday time.
+      expect(s.overflow.map((t) => t.id), [work.id]);
+      expect(_startOf(s, evening), 19 * 60);
+    });
+  });
 }

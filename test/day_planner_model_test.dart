@@ -46,7 +46,7 @@ void main() {
 
   group('Phase 9 — status transitions', () {
     late DayPlannerModel model;
-    setUp(() => model = DayPlannerModel());
+    setUp(() => model = DayPlannerModel()..setWorkday(6, 23));
     tearDown(() => model.dispose());
 
     test('startTask: notStarted → inProgress with startedAt', () {
@@ -159,7 +159,7 @@ void main() {
 
   group('Phase 9 — adaptive replanning & suggestions', () {
     late DayPlannerModel model;
-    setUp(() => model = DayPlannerModel());
+    setUp(() => model = DayPlannerModel()..setWorkday(6, 23));
     tearDown(() => model.dispose());
 
     test('adding a floating task into empty space is silent', () {
@@ -234,7 +234,7 @@ void main() {
   group('Phase 9 — overrun monitor', () {
     testWidgets('periodic check does not wipe a pending suggestion',
         (tester) async {
-      final model = DayPlannerModel();
+      final model = DayPlannerModel()..setWorkday(6, 23);
       final active = _floating('Active');
       final first = _floating('First', minutes: 30, outcome: true);
       final low = _floating('Low', minutes: 60, outcome: true);
@@ -276,7 +276,7 @@ void main() {
 
   group('Phase 10 — outcomes', () {
     late DayPlannerModel model;
-    setUp(() => model = DayPlannerModel());
+    setUp(() => model = DayPlannerModel()..setWorkday(6, 23));
     tearDown(() => model.dispose());
 
     test('adding beyond the outcome cap is rejected', () {
@@ -330,7 +330,8 @@ void main() {
 
     setUp(() async {
       repo = _MemoryRepository();
-      model = DayPlannerModel(initialDate: today, repository: repo);
+      model = DayPlannerModel(initialDate: today, repository: repo)
+        ..setWorkday(6, 23);
       await model.loadDate(today);
     });
     tearDown(() => model.dispose());
@@ -412,7 +413,7 @@ void main() {
 
   group('Phase 12 review — validation', () {
     late DayPlannerModel model;
-    setUp(() => model = DayPlannerModel());
+    setUp(() => model = DayPlannerModel()..setWorkday(6, 23));
     tearDown(() => model.dispose());
 
     Task fixed(String title, TaskType type, int hour, {int minutes = 60}) =>
@@ -525,6 +526,62 @@ void main() {
       expect(source.lastIds, {'work'});
       expect(model.schedule.committed, isEmpty);
       model.dispose();
+    });
+  });
+
+  group('Workday', () {
+    final future = DateTime.now().add(const Duration(days: 30));
+    Task onFuture(String title, int minutes) => Task(
+      title: title,
+      durationMinutes: minutes,
+      type: TaskType.floating,
+      date: future,
+    );
+
+    test('work is planned from the workday start', () {
+      final model = DayPlannerModel(initialDate: future)..setWorkday(9, 17);
+      final t = onFuture('Deep work', 60);
+      model.addTask(t);
+      expect(_startOf(model, t), 9 * 60);
+    });
+
+    test('shrinking the workday reports work that no longer fits', () {
+      final model = DayPlannerModel(initialDate: future)..setWorkday(9, 17);
+      final a = onFuture('A', 240);
+      final b = onFuture('B', 240);
+      model.addTask(a);
+      model.addTask(b);
+      expect(model.schedule.overflow, isEmpty);
+
+      model.setWorkday(9, 15);
+      expect(model.schedule.overflow.length, 1);
+      expect(model.suggestion?.pushedOut.length, 1);
+    });
+
+    test('meetings and set-time items may sit outside the workday', () {
+      final model = DayPlannerModel(initialDate: future)..setWorkday(9, 17);
+      model.addTask(
+        Task(
+          title: 'Dinner',
+          durationMinutes: 90,
+          type: TaskType.hard,
+          startTime: const TimeOfDay(hour: 19, minute: 0),
+          date: future,
+        ),
+      );
+      expect(model.schedule.committed.length, 1);
+      expect(
+        () => model.addTask(
+          Task(
+            title: 'Late',
+            durationMinutes: 60,
+            type: TaskType.hard,
+            startTime: const TimeOfDay(hour: 23, minute: 30),
+            date: future,
+          ),
+        ),
+        throwsArgumentError,
+      );
     });
   });
 }

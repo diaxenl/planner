@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/constants.dart';
 import '../../core/theme.dart';
+import '../../core/utils.dart';
 import '../../models/calendar_event.dart';
 import '../../state/day_planner_provider.dart';
 import '../../state/settings_provider.dart';
@@ -84,11 +85,85 @@ class SettingsScreen extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 32),
+          Text('WORKDAY', style: text.labelSmall),
+          const SizedBox(height: 4),
+          Text(
+            'Work is planned, and free time counted, only in these hours. '
+            'Meetings can still be at any time.',
+            style: text.bodyMedium,
+          ),
+          const SizedBox(height: 8),
+          _HourStepper(
+            label: 'Starts',
+            hour: settings.workdayStartHour,
+            onChanged: (h) => model.setWorkday(h, settings.workdayEndHour),
+            canDecrease: settings.workdayStartHour > 0,
+            canIncrease:
+                settings.workdayStartHour + 1 < settings.workdayEndHour,
+          ),
+          _HourStepper(
+            label: 'Ends',
+            hour: settings.workdayEndHour,
+            onChanged: (h) => model.setWorkday(settings.workdayStartHour, h),
+            canDecrease:
+                settings.workdayEndHour - 1 > settings.workdayStartHour,
+            canIncrease: settings.workdayEndHour < 24,
+          ),
+          const SizedBox(height: 32),
           Text('CALENDARS', style: text.labelSmall),
           const SizedBox(height: 12),
           const _CalendarPicker(),
         ],
       ),
+    );
+  }
+}
+
+/// A label with an hour value and − / + buttons, one hour per step.
+class _HourStepper extends StatelessWidget {
+  const _HourStepper({
+    required this.label,
+    required this.hour,
+    required this.onChanged,
+    required this.canDecrease,
+    required this.canIncrease,
+  });
+
+  final String label;
+  final int hour;
+  final ValueChanged<int> onChanged;
+  final bool canDecrease;
+  final bool canIncrease;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = HyperColors.of(context);
+    final text = Theme.of(context).textTheme;
+    return Row(
+      children: [
+        Expanded(child: Text(label, style: text.bodyLarge)),
+        IconButton(
+          tooltip: '$label earlier',
+          onPressed: canDecrease ? () => onChanged(hour - 1) : null,
+          icon: const Icon(Icons.remove),
+        ),
+        SizedBox(
+          width: 84,
+          child: Text(
+            hour == 24 ? 'Midnight' : AppUtils.formatClock(hour * 60),
+            textAlign: TextAlign.center,
+            style: text.titleMedium?.copyWith(
+              color: colors.accent,
+              fontFeatures: AppTheme.tabularFigures,
+            ),
+          ),
+        ),
+        IconButton(
+          tooltip: '$label later',
+          onPressed: canIncrease ? () => onChanged(hour + 1) : null,
+          icon: const Icon(Icons.add),
+        ),
+      ],
     );
   }
 }
