@@ -25,7 +25,7 @@ class AppTheme {
     textMuted: Color(0xFF61666D),
     accent: Color(0xFFF2B544),
     onAccent: Color(0xFF1A1405),
-    meeting: Color(0xFF4A4F57),
+    meeting: Color(0xFF5B7DA3),
     other: Color(0xFF8A9099),
   );
 
@@ -38,7 +38,7 @@ class AppTheme {
     textMuted: Color(0xFF9A9EA4),
     accent: Color(0xFFB8760E),
     onAccent: Color(0xFF1A1405),
-    meeting: Color(0xFFA2A7AF),
+    meeting: Color(0xFF7C9CC2),
     other: Color(0xFF5F656E),
   );
 

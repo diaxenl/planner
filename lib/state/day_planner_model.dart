@@ -155,6 +155,7 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     _events = await _fetchEvents();
 
     _reschedule();
+    _anchorOutcomes();
     _ensureOverrunMonitor();
     _isLoading = false;
     notifyListeners();
@@ -177,6 +178,10 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     if (state == AppLifecycleState.paused) {
       _saveTimer?.cancel();
       _saveNow();
+    } else if (state == AppLifecycleState.resumed) {
+      // Back from the background (maybe hours later): don't wait for the
+      // minute tick to catch up with the clock.
+      tick();
     }
   }
 
@@ -286,6 +291,7 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
       );
       _suggestionBase = base;
     }
+    if (_suggestion == null) _anchorOutcomes();
     _scheduleSave();
     notifyListeners();
   }
@@ -308,11 +314,7 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
       final t = _tasks[i];
       if (t.id == id || t.status != TaskStatus.inProgress) continue;
       paused.add(t);
-      _tasks[i] = t.copyWith(
-        status: TaskStatus.notStarted,
-        startedAt: () => null,
-        actualDurationMinutes: () => _trackedMinutes(t, DateTime.now()),
-      );
+      _tasks[i] = _paused(t, DateTime.now());
     }
 
     _tasks[index] = _tasks[index].copyWith(
@@ -335,11 +337,7 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     if (index == -1) return null;
     final t = _tasks[index];
     if (t.status != TaskStatus.inProgress) return null;
-    _tasks[index] = t.copyWith(
-      status: TaskStatus.notStarted,
-      startedAt: () => null,
-      actualDurationMinutes: () => _trackedMinutes(t, DateTime.now()),
-    );
+    _tasks[index] = _paused(t, DateTime.now());
     _rescheduleAndDiff(excludeTaskId: id);
     _ensureOverrunMonitor();
     _scheduleSave();
@@ -366,15 +364,18 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
-  /// Minutes tracked on [t] as of [at]: earlier runs (kept in
-  /// [Task.actualDurationMinutes] while not complete) plus the current run.
-  static int _trackedMinutes(Task t, DateTime at) {
-    final earlier = t.actualDurationMinutes ?? 0;
-    if (t.status != TaskStatus.inProgress || t.startedAt == null) {
-      return earlier;
-    }
-    final current = at.difference(t.startedAt!).inMinutes;
-    return earlier + (current < 0 ? 0 : current);
+  /// [t] paused at [at]: back to not started, keeping the minutes tracked
+  /// so far and the run just ended (see [Task.pausedRuns]).
+  static Task _paused(Task t, DateTime at) {
+    final started = t.startedAt;
+    return t.copyWith(
+      status: TaskStatus.notStarted,
+      startedAt: () => null,
+      actualDurationMinutes: () => t.trackedMinutes(at),
+      pausedRuns: started != null && at.difference(started).inMinutes >= 1
+          ? [...t.pausedRuns, DateTimeRange(start: started, end: at)]
+          : null,
+    );
   }
 
   /// Marks the task with [id] as complete at the given [completedAt] time.
@@ -398,11 +399,16 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     // nothing was ever tracked ("I forgot to hit Start"), the estimate is
     // the best guess for where the time went; `startedAt == completedAt`
     // marks it as untracked so estimate accuracy leaves it out.
-    final tracked = _trackedMinutes(current, completedAt);
+    final tracked = current.trackedMinutes(completedAt);
     final DateTime startedAt;
     final int actualDurationMinutes;
     if (current.startedAt != null) {
       startedAt = current.startedAt!;
+      actualDurationMinutes = tracked;
+    } else if (current.pausedRuns.isNotEmpty) {
+      // Paused, then marked Done without resuming: the work is in its
+      // runs, so it counts as started when the first run began.
+      startedAt = current.pausedRuns.first.start;
       actualDurationMinutes = tracked;
     } else if (tracked > 0) {
       startedAt = completedAt.subtract(Duration(minutes: tracked));
@@ -432,6 +438,7 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     // of the triggering mutation). We just clear the suggestion.
     _suggestion = null;
     _suggestionBase = null;
+    _anchorOutcomes();
     notifyListeners();
   }
 
@@ -450,6 +457,7 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     _suggestion = null;
     _suggestionBase = null;
     _reschedule();
+    _anchorOutcomes();
     notifyListeners();
   }
 
@@ -490,6 +498,7 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
       startedAt: () => null,
       completedAt: () => null,
       actualDurationMinutes: () => null,
+      pausedRuns: const [],
       isOutcome: task.isOutcome && targetOutcomes < outcomeCap,
       type: task.type == TaskType.pinned ? TaskType.floating : null,
       startTime: task.type == TaskType.pinned ? () => null : null,
@@ -680,9 +689,81 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
   List<CalendarEvent> get allDayEvents =>
       _events.where((e) => e.isAllDay).toList(growable: false);
 
-  /// Whether [task] is an imported calendar meeting (read-only; it never
-  /// appears in [tasks] and is never persisted).
+  /// Whether [task] is an imported calendar meeting. It never appears in
+  /// [tasks] and is never persisted; edits go back to the calendar (see
+  /// [updateImported]).
   bool isImported(Task task) => task.id.startsWith(_importedPrefix);
+
+  CalendarEvent? _eventOf(Task task) {
+    if (!isImported(task)) return null;
+    final id = task.id.substring(_importedPrefix.length);
+    for (final e in _events) {
+      if (e.id == id) return e;
+    }
+    return null;
+  }
+
+  /// Why the imported meeting [task] can't be changed from here, or `null`
+  /// if it can (see [updateImported]).
+  String? whyNotEditable(Task task) {
+    final e = _eventOf(task);
+    if (e == null || e.eventId == null) {
+      return 'From your calendar. Edit it in your calendar app.';
+    }
+    if (e.isRecurring) {
+      return 'A repeating meeting. Change it in your calendar app so the '
+          'right dates change.';
+    }
+    if (e.isReadOnly) {
+      return "This calendar can't be changed from other apps. Edit it in "
+          'your calendar app.';
+    }
+    final day = _dateOnly(e.start);
+    if (day != _viewedDate || e.end.isAfter(day.add(const Duration(days: 1)))) {
+      return 'Runs past this day. Edit it in your calendar app.';
+    }
+    return null;
+  }
+
+  /// Saves a change to the imported meeting [task] — name, start, and
+  /// length — to the phone's calendar, then re-reads the day. Throws
+  /// [ArgumentError] if it can't be changed here (see [whyNotEditable]),
+  /// is invalid, or the calendar didn't accept it.
+  Future<void> updateImported(
+    Task task, {
+    required String title,
+    required TimeOfDay start,
+    required int durationMinutes,
+  }) async {
+    final event = _eventOf(task);
+    final why = whyNotEditable(task);
+    if (event == null || why != null) throw ArgumentError(why);
+    final edited = task.copyWith(
+      title: title,
+      startTime: () => start,
+      durationMinutes: durationMinutes,
+    );
+    _validateDuration(edited);
+    final startAt = _viewedDate.add(
+      Duration(hours: start.hour, minutes: start.minute),
+    );
+    if (_toMinutes(start) + durationMinutes > 24 * 60) {
+      throw ArgumentError('That runs past midnight.');
+    }
+    final bool saved;
+    try {
+      saved = await _calendarSource.updateEvent(
+        event,
+        title: title,
+        start: startAt,
+        end: startAt.add(Duration(minutes: durationMinutes)),
+      );
+    } catch (_) {
+      throw ArgumentError("Couldn't save to your calendar.");
+    }
+    if (!saved) throw ArgumentError("Couldn't save to your calendar.");
+    await refreshCalendar();
+  }
 
   /// Calendars available on the device (for the Settings picker).
   Future<List<DeviceCalendarInfo>> listCalendars() async {
@@ -762,23 +843,7 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
               )
             : t,
     ];
-    DaySchedule plan(int buffer) => Scheduler.schedule(
-      input,
-      dayStartHour: _workdayStartHour,
-      dayEndHour: _workdayEndHour,
-      nowMinutes: nowMinutes,
-      bufferMinutes: buffer,
-    );
-
-    // Breathing room gives way on a full day: it is kept only if it
-    // doesn't push more work out of the day.
-    var result = plan(_bufferMinutes);
-    if (_bufferMinutes > 0 && result.overflow.isNotEmpty) {
-      final tight = plan(0);
-      int lost(DaySchedule s) =>
-          s.overflow.fold(0, (sum, t) => sum + t.remainingMinutes);
-      if (lost(tight) < lost(result)) result = tight;
-    }
+    final result = _plan(input, nowMinutes);
 
     if (_heldStarts.isEmpty) {
       _schedule = result;
@@ -799,6 +864,26 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     );
   }
 
+  /// Plans [input] in the workday. Breathing room gives way on a full
+  /// day: it is kept only if it doesn't push more work out of the day.
+  DaySchedule _plan(List<Task> input, int? nowMinutes) {
+    DaySchedule plan(int buffer) => Scheduler.schedule(
+      input,
+      dayStartHour: _workdayStartHour,
+      dayEndHour: _workdayEndHour,
+      nowMinutes: nowMinutes,
+      bufferMinutes: buffer,
+    );
+    var result = plan(_bufferMinutes);
+    if (_bufferMinutes > 0 && result.overflow.isNotEmpty) {
+      final tight = plan(0);
+      int lost(DaySchedule s) =>
+          s.overflow.fold(0, (sum, t) => sum + t.remainingMinutes);
+      if (lost(tight) < lost(result)) result = tight;
+    }
+    return result;
+  }
+
   /// The current time in minutes from midnight when viewing today,
   /// floored to 5 minutes so planned times move in calm steps rather than
   /// every minute; `null` for any other day, so the whole day window is
@@ -813,6 +898,56 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
   /// Re-flows today's schedule as the clock moves, so not-started work
   /// never sits in the past. Only work pushed out of the day is reported
   /// (see [_replanForTime]). No-op when not viewing today.
+  /// Set-time items on today whose time has passed without a Start, in
+  /// time order. Meetings are never "missed": they happen regardless.
+  List<Task> get missedItems {
+    if (!isViewingToday) return const [];
+    final now = DateTime.now();
+    final nowMinutes = now.hour * 60 + now.minute;
+    final missed = [
+      for (final t in _tasks)
+        if (t.type == TaskType.pinned &&
+            t.status == TaskStatus.notStarted &&
+            t.pausedRuns.isEmpty &&
+            t.startTime != null &&
+            t.startTime!.hour * 60 + t.startTime!.minute + t.durationMinutes <=
+                nowMinutes)
+          t,
+    ];
+    int start(Task t) => t.startTime!.hour * 60 + t.startTime!.minute;
+    missed.sort((a, b) => start(a).compareTo(start(b)));
+    return missed;
+  }
+
+  /// Turns a set-time item into Anytime work, so it is planned into the
+  /// next free time today. Returns the item as it was, for Undo.
+  Task? planLaterToday(String id) {
+    final index = _tasks.indexWhere((t) => t.id == id);
+    if (index == -1) return null;
+    final before = _tasks[index];
+    updateTask(
+      id,
+      before.copyWith(type: TaskType.floating, startTime: () => null),
+    );
+    return before;
+  }
+
+  /// Whether the item with [id], made Anytime, would still fit into
+  /// today's free time (so "Later today" is worth offering).
+  bool fitsLaterToday(String id) {
+    final input = [
+      ..._eventTasks,
+      for (final t in _tasks)
+        t.id == id
+            ? t.copyWith(type: TaskType.floating, startTime: () => null)
+            : t,
+    ];
+    return !_plan(
+      input,
+      _nowMinutesForViewedDay,
+    ).overflow.any((t) => t.id == id);
+  }
+
   void tick() {
     if (!isViewingToday) return;
     _replanForTime();
@@ -820,9 +955,11 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   /// A replan caused by the clock (minute tick, overrun check) rather than
-  /// the user. Moves are applied silently; only work newly pushed out of
-  /// the day raises a suggestion, which can't be undone (time can't be
-  /// given back), so it offers OK only. A pending user suggestion is kept.
+  /// the user. Moves are applied silently, except work newly pushed out of
+  /// the day and Outcomes that slipped [AppConstants.outcomeSlipMinutes]
+  /// or more since the user last saw them (see [_outcomeAnchors]). Those
+  /// raise a suggestion, which can't be undone (time can't be given
+  /// back), so it offers OK only. A pending suggestion is kept.
   void _replanForTime() {
     if (_suggestion != null) {
       _reschedule();
@@ -830,17 +967,68 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     }
     final before = _schedule;
     _reschedule();
-    final candidate = _buildSuggestion(before, _schedule);
-    final pushedOut = candidate.pushedOut;
-    if (pushedOut.isNotEmpty) {
+    final pushedOut = _buildSuggestion(before, _schedule).pushedOut;
+    final slipped = _slippedOutcomes();
+    if (pushedOut.isNotEmpty || slipped.isNotEmpty) {
       _suggestion = ScheduleSuggestion(
         proposed: _schedule,
-        moves: const [],
+        moves: slipped,
         pushedOut: pushedOut,
         canUndo: false,
       );
       _suggestionBase = before;
     }
+  }
+
+  /// Where each open Outcome was planned to start when the user last saw
+  /// the plan settle: after their own change, or when they answered a
+  /// "day shifted" notice. Minutes from midnight, by task id.
+  final Map<String, int> _outcomeAnchors = {};
+
+  /// The first planned start of each not-started Outcome in [schedule].
+  static Map<String, int> _outcomeStarts(DaySchedule schedule) {
+    final starts = <String, int>{};
+    for (final st in schedule.committed) {
+      final t = st.task;
+      if (!t.isOutcome || t.status != TaskStatus.notStarted) continue;
+      final seen = starts[t.id];
+      if (seen == null || st.startMinutes < seen) {
+        starts[t.id] = st.startMinutes;
+      }
+    }
+    return starts;
+  }
+
+  /// Takes the current plan as what the user has seen.
+  void _anchorOutcomes() {
+    _outcomeAnchors
+      ..clear()
+      ..addAll(_outcomeStarts(_schedule));
+  }
+
+  /// Outcomes the clock has pushed [AppConstants.outcomeSlipMinutes] or
+  /// more past their anchor. A new Outcome is anchored where it is; one
+  /// that moved earlier is re-anchored there.
+  List<TaskMove> _slippedOutcomes() {
+    final byId = {for (final st in _schedule.committed) st.task.id: st.task};
+    final moves = <TaskMove>[];
+    for (final MapEntry(key: id, value: start) in _outcomeStarts(
+      _schedule,
+    ).entries) {
+      final anchor = _outcomeAnchors[id];
+      if (anchor == null || start < anchor) {
+        _outcomeAnchors[id] = start;
+      } else if (start - anchor >= AppConstants.outcomeSlipMinutes) {
+        moves.add(
+          TaskMove(
+            task: byId[id]!,
+            oldStart: TimeOfDay(hour: anchor ~/ 60, minute: anchor % 60),
+            newStart: TimeOfDay(hour: start ~/ 60, minute: start % 60),
+          ),
+        );
+      }
+    }
+    return moves;
   }
 
   /// Whether the viewed day is today.
@@ -953,6 +1141,7 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     );
     _suggestion = candidate.hasChanges ? candidate : null;
     _suggestionBase = candidate.hasChanges ? base : null;
+    if (_suggestion == null) _anchorOutcomes();
   }
 
   /// Returns `true` if any schedule-affecting field differs between

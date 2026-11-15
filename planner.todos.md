@@ -133,6 +133,46 @@ Owner approved implementing the round-4 feedback as one phase (2026-11-05). Out 
 - [x] Tests: `phase17_scheduler_test.dart`, `phase17_test.dart`, `phase17_widget_test.dart`
 - [ ] Validation: persona re-run of round 4 in the running app (harness in `tool/`)
 
+## Phase 18 — Owner Feedback: Insets, Zero-Setup Start, Timeline
+Owner feedback (2026-11-13): sheet bottoms hidden behind Android nav buttons; "not obvious how it works, I want to turn it on and go"; "better visualize my time blocks". Owner chose: smarter empty day (no tutorial) and a timeline that replaces the schedule list.
+- [x] Bottom sheets (item, imported meeting, "Something came up") pad for the system nav area — Android buttons / gesture bar and the iOS home indicator — as well as the keyboard
+- [x] Empty day (no items of your own; imported meetings don't count): one prompt replaces the load bar, Now card and Outcomes — "What's the one thing you need to get done {today}?" — submitting adds it as an Outcome (capture shorthand works, default 1h) and the normal screen appears with it scheduled
+- [x] Capture bar: while the field is focused, tappable shorthand chips (`30m`, `1h`, `at 3pm`, `tomorrow`, `★ Outcome`) append that token to the text
+- [x] Schedule section: vertical timeline replaces the list — hour labels, blocks sized by duration and colored by kind (Meeting / Outcome / Other), split sessions labelled "1/2", done items muted with a check, running item outlined, free gaps of 15m+ inside the workday labelled ("45m free"), a "now" line on today; overlapping calendar meetings sit side by side; tap a block to edit. Doesn't fit / Finished stay as lists below
+- [x] Tests: timeline layout (range, lanes, gaps), empty-day prompt adds an Outcome, shorthand chip appends its token
+- [ ] Validation: analyze clean, tests green (pre-existing clock-dependent failure in `review_screen_test.dart` unrelated), rendered phone-size screenshots reviewed with a simulated 48px nav bar; **remaining: check on a real Android and iOS device**
+
+## Phase 19 — New-User Test Fixes
+From the Claude in Chrome new-user test (2026-11-13). Owner approved all of A–C; missed items get a one-tap choice; meetings get an icon and their own hue; finished items stay on the timeline, ending when they were finished.
+- [x] A1 Missed: a set-time item whose time passed without a Start is marked "Missed" on the timeline and listed above the Now card with one-tap **Later today** (becomes Anytime) / **next weekday** / **Done**, each with Undo
+- [x] A2 Running past the estimate: Now card asks "Past your estimate — still on it?" with Pause
+- [x] A3 Re-plan as soon as the app comes back to the foreground
+- [x] B4 Countdowns and timers with units ("14 min", "12m 05s", "1h 12m") instead of "14:29"
+- [x] B5 Editing an Anytime item that moves it shows "Moved to 8:15 AM" with Undo
+- [x] B6 Meetings: calendar icon on the timeline and their own (blue-grey) hue everywhere meetings are colored
+- [x] B7 Timeline flags overlaps on your own items ("Overlaps Standup")
+- [x] C8 Finished items stay on the timeline, faded, ending at the time they were finished
+- [x] C9 "at …" chip opens a time picker and adds the chosen time
+- [x] C10 Toasts with an action dismiss after 5 seconds (Flutter keeps them up by default)
+- [x] C11 Short timeline blocks show their start time
+- [x] C12 "Cancel" (on an item) renamed "Won't do"
+- [x] C13 Load bar totals rounded to 5 minutes
+- [x] Tests (`phase19_test.dart`)
+- [x] Validation: analyze clean, tests green (same pre-existing review test failure); second Claude in Chrome new-user run done (11/12 confirmed; overlap partial → Phase 20)
+
+## Phase 20 — Second-Test Fixes and Two-Way Calendar
+From the second new-user test (2026-11-13). Owner chose #1–3, #4 as a visual (no more warnings), #5, #7, #9, and: calendar meetings should be editable in the app as well as in the calendar.
+- [x] Calendar meetings editable in the app (name, start, length), saved back to the phone's calendar via the existing `device_calendar` 4.3.3 (no dependency change); edits made in the calendar app still show up on refresh. Not editable here, with the reason shown: repeating meetings (the plugin would change the whole series — iOS saves "this and future events", Android rewrites the series), read-only calendars, events running past the day
+- [x] #1 Paused work stays on the timeline where it happened ("Worked 45m"), and Review counts tracked time on paused and running work; a paused set-time item is not "Missed"
+- [x] #2 "Later today" is only offered on a missed item when it still fits; otherwise the next weekday is the main choice
+- [x] #3 An Outcome the clock pushes 30+ minutes later than when you last looked raises the "Your day shifted" card (OK only)
+- [x] #4 Overlaps are shown as a striped stretch on both blocks (warning icon and "Overlaps …" text removed; still read out by screen readers); missed, finished and already-worked blocks don't count
+- [x] #5 Toasts with Undo stay 8 seconds
+- [x] #7 "Your day shifted" card: a short headline (item names only in the rows); Undo renamed "Keep as it was"
+- [x] #9 Review: "Drop" → "Won't do"
+- [x] Tests (`phase20_test.dart`)
+- [ ] Validation: analyze clean, tests green (same pre-existing review test failure), rendered screenshots reviewed; **remaining: calendar write-back on a real Android/iOS device**
+
 ---
 
 **Current status:** Engine (Phases 1–9) complete. Phases 10–13, 15, 16 and 17 complete (17 awaiting a live persona re-run). Phase 14 code complete with `device_calendar` 4.3.3 (owner-approved 2026-11-05); **remaining: Android SDK install (+ Windows Developer Mode for plugin builds) and a real-device check with Google, Microsoft and iCloud accounts.**

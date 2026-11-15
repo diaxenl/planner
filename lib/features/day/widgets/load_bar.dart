@@ -32,7 +32,7 @@ class LoadBar extends StatelessWidget {
         Row(
           children: [
             Text(
-              '${AppUtils.formatDuration(load.free)} free',
+              '${_fmt(load.free)} free',
               style: text.titleMedium?.copyWith(
                 fontFeatures: AppTheme.tabularFigures,
               ),
@@ -47,7 +47,7 @@ class LoadBar extends StatelessWidget {
             ),
             if (load.overflow > 0)
               Text(
-                '${AppUtils.formatDuration(load.overflow)} won\'t fit',
+                '${_fmt(load.overflow)} won\'t fit',
                 style: text.bodySmall?.copyWith(color: colors.accent),
               ),
           ],
@@ -100,11 +100,12 @@ class LoadBar extends StatelessWidget {
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 6),
-        Text(
-          '$label ${AppUtils.formatDuration(minutes)}',
-          style: text.bodySmall,
-        ),
+        Text('$label ${_fmt(minutes)}', style: text.bodySmall),
       ],
     );
   }
 }
+
+/// Totals on 5-minute steps: a live clock otherwise gives odd sums like
+/// "2h 29m".
+String _fmt(int minutes) => AppUtils.formatDuration((minutes + 2) ~/ 5 * 5);

@@ -54,6 +54,7 @@ class Task {
     this.completedAt,
     this.startedAt,
     this.actualDurationMinutes,
+    this.pausedRuns = const [],
     required this.date,
     this.carriedFromDate,
     this.doNextAt,
@@ -101,6 +102,11 @@ class Task {
   /// tracked on earlier runs that were paused, or `null`.
   final int? actualDurationMinutes;
 
+  /// When it was worked on before being paused, in order: each run from
+  /// its Start to its Pause. Kept so paused work stays on the timeline
+  /// where it happened. The current run (if any) starts at [startedAt].
+  final List<DateTimeRange> pausedRuns;
+
   /// The calendar day this task belongs to (date only, time ignored).
   final DateTime date;
 
@@ -136,6 +142,7 @@ class Task {
     DateTime? Function()? completedAt,
     DateTime? Function()? startedAt,
     int? Function()? actualDurationMinutes,
+    List<DateTimeRange>? pausedRuns,
     DateTime? date,
     DateTime? Function()? carriedFromDate,
     DateTime? Function()? doNextAt,
@@ -155,6 +162,7 @@ class Task {
       actualDurationMinutes: actualDurationMinutes != null
           ? actualDurationMinutes()
           : this.actualDurationMinutes,
+      pausedRuns: pausedRuns ?? this.pausedRuns,
       date: date ?? this.date,
       carriedFromDate: carriedFromDate != null
           ? carriedFromDate()
@@ -171,6 +179,16 @@ class Task {
     final totalMinutes =
         startTime!.hour * 60 + startTime!.minute + durationMinutes;
     return TimeOfDay(hour: totalMinutes ~/ 60, minute: totalMinutes % 60);
+  }
+
+  /// Minutes tracked as of [at]: earlier, paused runs (kept in
+  /// [actualDurationMinutes] while not complete) plus the current run. On
+  /// a completed task, the total recorded at completion.
+  int trackedMinutes(DateTime at) {
+    final earlier = actualDurationMinutes ?? 0;
+    if (status != TaskStatus.inProgress || startedAt == null) return earlier;
+    final current = at.difference(startedAt!).inMinutes;
+    return earlier + (current < 0 ? 0 : current);
   }
 
   /// Returns `true` if this task is [TaskStatus.inProgress] and the
@@ -208,6 +226,10 @@ class Task {
       'completedAt': completedAt?.toIso8601String(),
       'startedAt': startedAt?.toIso8601String(),
       'actualDurationMinutes': actualDurationMinutes,
+      'pausedRuns': [
+        for (final r in pausedRuns)
+          {'start': r.start.toIso8601String(), 'end': r.end.toIso8601String()},
+      ],
       'date': date.toIso8601String(),
       'carriedFromDate': carriedFromDate?.toIso8601String(),
       'doNextAt': doNextAt?.toIso8601String(),
@@ -242,6 +264,15 @@ class Task {
           ? null
           : DateTime.parse(json['startedAt'] as String);
       final actualDurationMinutes = json['actualDurationMinutes'] as int?;
+      final pausedRuns = [
+        for (final r in json['pausedRuns'] as List<dynamic>? ?? const [])
+          DateTimeRange(
+            start: DateTime.parse(
+              (r as Map<String, dynamic>)['start'] as String,
+            ),
+            end: DateTime.parse(r['end'] as String),
+          ),
+      ];
       final date = DateTime.parse(json['date'] as String);
       final carriedFromDate = json['carriedFromDate'] == null
           ? null
@@ -263,6 +294,7 @@ class Task {
         completedAt: completedAt,
         startedAt: startedAt,
         actualDurationMinutes: actualDurationMinutes,
+        pausedRuns: pausedRuns,
         date: date,
         carriedFromDate: carriedFromDate,
         doNextAt: doNextAt,

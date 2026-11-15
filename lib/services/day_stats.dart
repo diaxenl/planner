@@ -170,7 +170,14 @@ class DayStats {
   /// attended as planned. Everything else is planned at its estimate and
   /// counted as actual from tracked time on completed tasks. Interruptions
   /// are never planned. Cancelled items count for nothing.
-  static TimeSplit timeSplit(List<Task> tasks, DaySchedule schedule) {
+  /// Time tracked on unfinished work (paused or running, as of [now])
+  /// counts as actual too.
+  static TimeSplit timeSplit(
+    List<Task> tasks,
+    DaySchedule schedule, {
+    DateTime? now,
+  }) {
+    final at = now ?? DateTime.now();
     final planned = {for (final b in TimeBucket.values) b: 0};
     final actual = {for (final b in TimeBucket.values) b: 0};
 
@@ -189,9 +196,7 @@ class DayStats {
       if (b != TimeBucket.interruptions) {
         planned[b] = planned[b]! + t.durationMinutes;
       }
-      if (t.status == TaskStatus.complete) {
-        actual[b] = actual[b]! + (t.actualDurationMinutes ?? 0);
-      }
+      actual[b] = actual[b]! + t.trackedMinutes(at);
     }
     return TimeSplit(planned: planned, actual: actual);
   }
@@ -215,12 +220,15 @@ class DayStats {
   }
 
   /// Minutes worked on Outcomes and on all non-meeting work, from tracked
-  /// time on completed tasks: `(outcomes, worked)`.
-  static (int, int) workedMinutes(List<Task> tasks) {
+  /// time (finished, paused, or running as of [now]): `(outcomes, worked)`.
+  static (int, int) workedMinutes(List<Task> tasks, {DateTime? now}) {
+    final at = now ?? DateTime.now();
     var outcomes = 0, worked = 0;
     for (final t in tasks) {
-      if (t.type == TaskType.hard || t.status != TaskStatus.complete) continue;
-      final minutes = t.actualDurationMinutes ?? 0;
+      if (t.type == TaskType.hard || t.status == TaskStatus.cancelled) {
+        continue;
+      }
+      final minutes = t.trackedMinutes(at);
       worked += minutes;
       if (bucketOf(t) == TimeBucket.outcomes) outcomes += minutes;
     }

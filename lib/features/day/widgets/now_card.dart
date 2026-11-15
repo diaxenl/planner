@@ -31,6 +31,7 @@ class NowCard extends StatefulWidget {
     this.running,
     this.startingSoon,
     this.onPause,
+    this.onPauseCurrent,
   });
 
   final ScheduledTask? item;
@@ -43,6 +44,9 @@ class NowCard extends StatefulWidget {
 
   /// Pauses [running].
   final VoidCallback? onPause;
+
+  /// Pauses [item] while it runs past its estimate.
+  final VoidCallback? onPauseCurrent;
 
   /// Whether the day has anything on it at all (picks the empty copy).
   final bool hasAnyTasks;
@@ -119,6 +123,7 @@ class _NowCardState extends State<NowCard> {
     final isMeeting = task.type == TaskType.hard;
     final inProgress = task.status == TaskStatus.inProgress;
 
+    var elapsedOver = 0;
     String label;
     String timer;
     String detail;
@@ -130,6 +135,7 @@ class _NowCardState extends State<NowCard> {
           now.difference(task.startedAt!) +
           Duration(minutes: task.actualDurationMinutes ?? 0);
       final over = elapsed.inMinutes - task.durationMinutes;
+      elapsedOver = over;
       label = 'NOW';
       timer = AppUtils.formatTimer(elapsed);
       if (over > 0) {
@@ -200,6 +206,16 @@ class _NowCardState extends State<NowCard> {
             Text(timer, style: text.displayLarge?.copyWith(color: timerColor)),
             const SizedBox(height: 4),
             Text(detail, style: text.bodyMedium),
+            if (inProgress &&
+                elapsedOver > 0 &&
+                widget.startingSoon == null) ...[
+              const SizedBox(height: 12),
+              _Warning(
+                text: 'Past your estimate — still on it?',
+                actionLabel: 'Pause',
+                onAction: widget.onPauseCurrent,
+              ),
+            ],
             if (widget.startingSoon != null && inProgress) ...[
               const SizedBox(height: 12),
               _Warning(
@@ -244,7 +260,7 @@ class _NowCardState extends State<NowCard> {
                   const SizedBox(width: 4),
                   TextButton(
                     onPressed: widget.onCancel,
-                    child: const Text('Cancel'),
+                    child: const Text("Won't do"),
                   ),
                 ],
               ),

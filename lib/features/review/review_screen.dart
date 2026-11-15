@@ -9,7 +9,7 @@ import '../day/widgets/day_picker.dart';
 
 /// End-of-day review for the viewed day: Outcomes hit, where the time
 /// went (planned vs actual), estimate accuracy, and an explicit decision
-/// — Tomorrow or Drop — for everything still open.
+/// — Tomorrow or Won't do — for everything still open.
 ///
 /// The score and time split are taken once when the screen opens, so
 /// resolving left-over items here doesn't rewrite the day's result.
@@ -215,7 +215,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
                   ),
                   TextButton(
                     onPressed: () => _drop(t),
-                    child: const Text('Drop'),
+                    child: const Text("Won't do"),
                   ),
                   TextButton(
                     onPressed: () => _moveTo(t, nextDay),
@@ -241,7 +241,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
   void _drop(Task task) {
     final model = DayPlannerProvider.of(context);
     model.cancelTask(task.id);
-    _snack('Dropped "${task.title}"', () => model.updateTask(task.id, task));
+    _snack('Won\'t do: "${task.title}"', () => model.updateTask(task.id, task));
   }
 
   Future<void> _moveTo(Task task, DateTime day) async {
@@ -272,6 +272,8 @@ class _ReviewScreenState extends State<ReviewScreen> {
       ..showSnackBar(
         SnackBar(
           content: Text(message),
+          persist: false,
+          duration: const Duration(seconds: 8),
           action: SnackBarAction(
             label: 'Undo',
             onPressed: () {

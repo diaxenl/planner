@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../../core/theme.dart';
@@ -5,10 +7,11 @@ import '../../../core/utils.dart';
 import '../../../models/day_schedule.dart';
 import '../../../models/scheduled_task.dart';
 import '../../../models/task.dart';
+import 'schedule_timeline.dart';
 
-/// The day in time order, one line per item, followed by anything that
-/// doesn't fit and anything already finished off the plan. A split
-/// Outcome has one line per session.
+/// The day on a timeline ([ScheduleTimeline]), followed by anything
+/// that doesn't fit and anything already finished off the plan. A split
+/// Outcome has one block per session.
 class AgendaList extends StatelessWidget {
   const AgendaList({
     super.key,
@@ -16,9 +19,19 @@ class AgendaList extends StatelessWidget {
     required this.tasks,
     required this.current,
     required this.onTap,
+    required this.dayStartHour,
+    required this.dayEndHour,
+    required this.isToday,
   });
 
   final DaySchedule schedule;
+
+  /// The workday, for the timeline's range and free time.
+  final int dayStartHour;
+  final int dayEndHour;
+
+  /// Shows the now line on the timeline.
+  final bool isToday;
 
   /// All tasks on the day — used to list finished floating work, which
   /// the scheduler no longer places.
@@ -32,36 +45,50 @@ class AgendaList extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final placedIds = schedule.committed.map((st) => st.task.id).toSet();
+    // Finished work the scheduler no longer places goes back on the
+    // timeline where it happened: ending when it was marked Done. Work
+    // done before a pause is shown where it happened too.
+    final finishedEntries = [
+      for (final t in tasks)
+        if (!placedIds.contains(t.id) && _finishedOnItsDay(t))
+          ..._whenFinished(t)
+        else if (t.status != TaskStatus.cancelled &&
+            t.status != TaskStatus.complete)
+          ..._pausedRuns(t),
+    ];
+    final onTimeline = {for (final e in finishedEntries) e.task.id};
     final finishedOffPlan = tasks
         .where(
           (t) =>
               !placedIds.contains(t.id) &&
+              !onTimeline.contains(t.id) &&
               (t.status == TaskStatus.complete ||
                   t.status == TaskStatus.cancelled),
         )
         .toList();
+    final entries = [...schedule.committed, ...finishedEntries];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('SCHEDULE', style: text.labelSmall),
         const SizedBox(height: 8),
-        if (schedule.committed.isEmpty)
+        if (entries.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 10),
             child: Text('Nothing scheduled.', style: text.bodyMedium),
           ),
-        for (final st in schedule.committed)
-          _Row(
-            time: AppUtils.formatClock(st.startMinutes),
-            task: st.task,
-            minutes: st.durationMinutes,
-            session: st.isSplit ? '${st.part}/${st.parts}' : null,
-            isCurrent:
-                st.task.id == current?.task.id &&
-                st.startMinutes == current?.startMinutes,
-            onTap: () => onTap(st.task),
+        if (entries.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          ScheduleTimeline(
+            entries: entries,
+            current: current,
+            dayStartHour: dayStartHour,
+            dayEndHour: dayEndHour,
+            isToday: isToday,
+            onTap: onTap,
           ),
+        ],
         if (schedule.overflow.isNotEmpty) ...[
           const SizedBox(height: 24),
           Text("DOESN'T FIT", style: text.labelSmall),
@@ -93,6 +120,76 @@ class AgendaList extends StatelessWidget {
   }
 }
 
+/// Whether [t] was marked Done on the day it belongs to.
+bool _finishedOnItsDay(Task t) {
+  final at = t.completedAt;
+  return t.status == TaskStatus.complete &&
+      at != null &&
+      at.year == t.date.year &&
+      at.month == t.date.month &&
+      at.day == t.date.day;
+}
+
+/// [t]'s runs before it was paused, on its own day, as timeline entries
+/// (at least 5 minutes, so they stay visible).
+List<ScheduledTask> _pausedRuns(Task t) {
+  final dayEnd = DateTime(t.date.year, t.date.month, t.date.day + 1);
+  int minutesOf(DateTime d) =>
+      d.isBefore(dayEnd) ? d.hour * 60 + d.minute : 24 * 60;
+  return [
+    for (final r in t.pausedRuns)
+      if (r.start.year == t.date.year &&
+          r.start.month == t.date.month &&
+          r.start.day == t.date.day)
+        () {
+          final start = math.min(minutesOf(r.start), 24 * 60 - 5);
+          final end = math.max(start + 5, minutesOf(r.end));
+          return ScheduledTask(
+            task: t,
+            computedStartTime: TimeOfDay(hour: start ~/ 60, minute: start % 60),
+            durationMinutes: end - start,
+            isPausedRun: true,
+          );
+        }(),
+  ];
+}
+
+/// [t] on the timeline as worked: any runs before a pause, then the last
+/// run, ending at its completion time. Without runs, one entry ending
+/// at completion, as long as the time spent on it (at least 5 minutes, so
+/// it stays visible).
+List<ScheduledTask> _whenFinished(Task t) {
+  final runs = _pausedRuns(t);
+  final started = t.startedAt;
+  if (runs.isNotEmpty) {
+    // Resumed after the last pause: the final run ends at completion.
+    final resumed = started != null && !started.isBefore(t.pausedRuns.last.end);
+    return [
+      ...runs,
+      if (resumed)
+        _ending(
+          t,
+          t.completedAt!,
+          t.completedAt!.difference(started).inMinutes,
+        ),
+    ];
+  }
+  return [
+    _ending(t, t.completedAt!, t.actualDurationMinutes ?? t.durationMinutes),
+  ];
+}
+
+/// [t] as one entry of [minutes] (at least 5) ending at [at].
+ScheduledTask _ending(Task t, DateTime at, int minutes) {
+  final end = at.hour * 60 + at.minute;
+  final start = math.max<int>(0, end - math.max(5, minutes));
+  return ScheduledTask(
+    task: t,
+    computedStartTime: TimeOfDay(hour: start ~/ 60, minute: start % 60),
+    durationMinutes: math.max(5, end - start),
+  );
+}
+
 class _Row extends StatelessWidget {
   const _Row({
     required this.time,
@@ -100,17 +197,12 @@ class _Row extends StatelessWidget {
     required this.minutes,
     required this.isCurrent,
     required this.onTap,
-    this.session,
   });
 
   final String time;
   final Task task;
 
-  /// Minutes this line covers (one session of a split Outcome).
   final int minutes;
-
-  /// "1/3" for a session of a split Outcome.
-  final String? session;
   final bool isCurrent;
   final VoidCallback onTap;
 
@@ -172,7 +264,7 @@ class _Row extends StatelessWidget {
               Text(
                 task.status == TaskStatus.inProgress
                     ? 'In progress'
-                    : [AppUtils.formatDuration(minutes), ?session].join(' · '),
+                    : AppUtils.formatDuration(minutes),
                 style: text.bodySmall?.copyWith(
                   color: task.status == TaskStatus.inProgress
                       ? colors.accent

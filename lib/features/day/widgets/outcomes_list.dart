@@ -114,7 +114,7 @@ class OutcomesList extends StatelessWidget {
 
     final String when;
     if (isCancelled) {
-      when = 'Cancelled';
+      when = "Won't do";
     } else if (isDone) {
       when =
           task.actualDurationMinutes != null && task.actualDurationMinutes! > 0

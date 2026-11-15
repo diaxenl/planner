@@ -22,15 +22,16 @@ class AppUtils {
     return '${h}h ${m}m';
   }
 
-  /// Formats a running timer, e.g. "4:07" or "1:12:30".
+  /// Formats a timer or countdown with units, so it can't be read as a
+  /// clock time: "45s", "14m 05s", "1h 12m".
   static String formatTimer(Duration d) {
     final total = d.inSeconds.abs();
     final h = total ~/ 3600;
     final m = (total % 3600) ~/ 60;
     final s = total % 60;
-    final ss = s.toString().padLeft(2, '0');
-    if (h > 0) return '$h:${m.toString().padLeft(2, '0')}:$ss';
-    return '$m:$ss';
+    if (h > 0) return '${h}h ${m.toString().padLeft(2, '0')}m';
+    if (m > 0) return '${m}m ${s.toString().padLeft(2, '0')}s';
+    return '${s}s';
   }
 
   /// Returns the full weekday name for [DateTime.weekday] (1 = Monday).

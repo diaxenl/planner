@@ -85,7 +85,10 @@ class SuggestionBanner extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               if (suggestion.canUndo)
-                TextButton(onPressed: onDismiss, child: const Text('Undo')),
+                TextButton(
+                  onPressed: onDismiss,
+                  child: const Text('Keep as it was'),
+                ),
               TextButton(
                 onPressed: onAccept,
                 style: TextButton.styleFrom(foregroundColor: colors.accent),

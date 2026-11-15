@@ -18,6 +18,7 @@ class ScheduledTask {
     int? durationMinutes,
     this.part = 1,
     this.parts = 1,
+    this.isPausedRun = false,
   }) : _durationMinutes = durationMinutes;
 
   /// The underlying task.
@@ -40,6 +41,10 @@ class ScheduledTask {
 
   /// Whether the task was split into more than one session.
   bool get isSplit => parts > 1;
+
+  /// A stretch already worked on [task] before it was paused (see
+  /// [Task.pausedRuns]), drawn where it happened rather than planned.
+  final bool isPausedRun;
 
   /// The time this entry ends: [computedStartTime] + [durationMinutes].
   TimeOfDay get computedEndTime {

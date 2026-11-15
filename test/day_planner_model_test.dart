@@ -619,4 +619,12 @@ class _FakeCalendar implements CalendarSource {
     if (fail) throw StateError('no access');
     return events;
   }
+
+  @override
+  Future<bool> updateEvent(
+    CalendarEvent event, {
+    required String title,
+    required DateTime start,
+    required DateTime end,
+  }) async => false;
 }

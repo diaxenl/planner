@@ -5,7 +5,8 @@ import 'calendar_source.dart';
 
 /// Reads the phone's calendar store (Android Calendar Provider / iOS
 /// EventKit) via `device_calendar`. Google, Microsoft and iCloud accounts
-/// synced to the phone all appear here. Read-only: nothing is written.
+/// synced to the phone all appear here. Only [updateEvent] writes, and
+/// only to a single, non-repeating event the user edited in the app.
 class DeviceCalendarSource implements CalendarSource {
   DeviceCalendarSource() : _plugin = dc.DeviceCalendarPlugin();
 
@@ -77,11 +78,51 @@ class DeviceCalendarSource implements CalendarSource {
               e.end!.millisecondsSinceEpoch,
             ),
             isAllDay: e.allDay ?? false,
+            eventId: e.eventId,
+            isRecurring: e.recurrenceRule != null,
+            isReadOnly: cal.isReadOnly ?? true,
           ),
         );
       }
     }
     return events;
+  }
+
+  @override
+  Future<bool> updateEvent(
+    CalendarEvent event, {
+    required String title,
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    if (event.eventId == null || event.isRecurring || event.isReadOnly) {
+      return false;
+    }
+    if (!await _hasAccess()) return false;
+    // Re-read the stored event so everything not edited here (notes,
+    // place, guests, reminders) is saved back unchanged.
+    final found = await _plugin.retrieveEvents(
+      event.calendarId,
+      dc.RetrieveEventsParams(startDate: event.start, endDate: event.end),
+    );
+    if (!found.isSuccess) return false;
+    dc.Event? stored;
+    for (final e in found.data!) {
+      if (e.eventId == event.eventId) stored = e;
+    }
+    if (stored == null ||
+        stored.recurrenceRule != null ||
+        stored.start == null) {
+      return false;
+    }
+    // Keep the event's own time zone.
+    final zone = stored.start!.location;
+    stored
+      ..title = title
+      ..start = dc.TZDateTime.from(start, zone)
+      ..end = dc.TZDateTime.from(end, zone);
+    final saved = await _plugin.createOrUpdateEvent(stored);
+    return saved != null && saved.isSuccess;
   }
 
   /// Whether the phone's owner declined [e], where the platform says so.

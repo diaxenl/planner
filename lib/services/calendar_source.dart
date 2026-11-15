@@ -1,6 +1,7 @@
 import '../models/calendar_event.dart';
 
-/// Read-only access to the phone's calendars.
+/// Access to the phone's calendars: reading events, and saving changes
+/// made to one in the app.
 ///
 /// Android and iOS sync Google, Microsoft, and iCloud accounts into the
 /// on-device calendar store, so one implementation reading that store
@@ -19,6 +20,15 @@ abstract class CalendarSource {
     DateTime date,
     Set<String>? calendarIds,
   );
+
+  /// Saves a new [title], [start] and [end] to [event] in its calendar.
+  /// Returns whether the calendar accepted the change.
+  Future<bool> updateEvent(
+    CalendarEvent event, {
+    required String title,
+    required DateTime start,
+    required DateTime end,
+  });
 }
 
 /// No calendars — used on desktop/web previews and in tests.
@@ -36,4 +46,12 @@ class NoCalendarSource implements CalendarSource {
     DateTime date,
     Set<String>? calendarIds,
   ) async => const [];
+
+  @override
+  Future<bool> updateEvent(
+    CalendarEvent event, {
+    required String title,
+    required DateTime start,
+    required DateTime end,
+  }) async => false;
 }

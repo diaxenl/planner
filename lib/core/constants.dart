@@ -44,6 +44,10 @@ class AppConstants {
   /// is about to run into it.
   static const int meetingWarningMinutes = 5;
 
+  /// How far the clock may push an Outcome later (while the user does
+  /// something else) before the day screen says so.
+  static const int outcomeSlipMinutes = 30;
+
   // ── Outcomes ────────────────────────────────────────────────────────
   /// Default and allowed range for the daily outcome cap (Settings).
   static const int defaultOutcomeCap = 3;

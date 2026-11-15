@@ -18,7 +18,8 @@ review asked for UX feedback (good / needs work / fails) and a price, from $0
 `flutter test` that ran the real `Scheduler` and `CaptureParser` on the
 persona's day (results in §4). The planned live browser walkthrough did
 **not** happen. The Chrome extension conflicts with the owner's work account,
-so don't use Claude in Chrome. The harness below is ready for a headless or
+so **ask the owner's permission before each use of Claude in Chrome** (rule
+changed 2026-11-13; the owner allowed it for the Phase 18 new-user test). The harness below is ready for a headless or
 other non-account browser approach if the owner approves one.
 
 ---

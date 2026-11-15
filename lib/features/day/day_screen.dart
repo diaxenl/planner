@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/utils.dart';
+import '../../models/scheduled_task.dart';
 import '../../models/task.dart';
 import '../../services/capture_parser.dart';
 import '../../services/day_stats.dart';
@@ -19,14 +20,18 @@ import 'widgets/day_picker.dart';
 import 'widgets/interruption_sheet.dart';
 import 'widgets/item_sheet.dart';
 import 'widgets/load_bar.dart';
+import 'widgets/missed_list.dart';
 import 'widgets/now_card.dart';
 import 'widgets/outcomes_list.dart';
+import 'widgets/start_prompt.dart';
 import 'widgets/suggestion_banner.dart';
 
 /// Home screen — one day, built around its Outcomes.
 ///
 /// Top to bottom: header, load bar, suggestion banner, Now card (today
-/// only), Outcomes, Schedule; capture bar pinned at the bottom.
+/// only), Outcomes, Schedule; capture bar pinned at the bottom. A day
+/// (today or later) with nothing of your own on it shows only the
+/// [StartPrompt] and any meetings, so there is one obvious first step.
 class DayScreen extends StatefulWidget {
   const DayScreen({super.key});
 
@@ -61,6 +66,11 @@ class _DayScreenState extends State<DayScreen> {
     final isToday = model.isViewingToday;
     final current = model.currentItem;
     final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    // Imported meetings don't count: the day still needs its first step.
+    final isEmptyDay =
+        !model.viewedDate.isBefore(today) &&
+        model.tasks.every(model.isImported);
 
     final dayLabel = switch (AppUtils.relativeDayLabel(model.viewedDate, now)) {
       'Today' => 'today',
@@ -116,64 +126,24 @@ class _DayScreenState extends State<DayScreen> {
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
                     children: [
-                      LoadBar(load: load, dayLabel: dayLabel),
-                      if (model.suggestion != null) ...[
-                        const SizedBox(height: 20),
-                        SuggestionBanner(
-                          suggestion: model.suggestion!,
-                          onAccept: model.acceptSuggestion,
-                          onDismiss: model.dismissSuggestion,
+                      if (isEmptyDay) ...[
+                        StartPrompt(
+                          dayLabel: dayLabel,
+                          onSubmit: (raw) =>
+                              _capture(model, raw, asOutcome: true),
                         ),
-                      ],
-                      if (isToday) ...[
-                        const SizedBox(height: 20),
-                        NowCard(
-                          item: current,
-                          hasAnyTasks: model.tasks.isNotEmpty,
-                          onStart: () => _act(ItemAction.start, current!.task),
-                          onDone: () => _act(ItemAction.done, current!.task),
-                          onCancel: () =>
-                              _act(ItemAction.cancel, current!.task),
-                          onTap: () => _edit(model, current!.task),
-                          onReview: () => ReviewScreen.open(context),
-                          running: model.runningBehindCurrent,
-                          startingSoon: model.fixedItemStartingSoon,
-                          onPause: () {
-                            final running = model.runningBehindCurrent;
-                            if (running != null) _pause(model, running.task);
-                          },
+                        if (model.schedule.committed.isNotEmpty) ...[
+                          const SizedBox(height: 28),
+                          _agenda(model, current),
+                        ],
+                      ] else
+                        ..._daySections(
+                          model,
+                          load: load,
+                          dayLabel: dayLabel,
+                          isToday: isToday,
+                          current: current,
                         ),
-                      ],
-                      const SizedBox(height: 28),
-                      OutcomesList(
-                        tasks: model.tasks.where((t) => t.isOutcome).toList(),
-                        schedule: model.schedule,
-                        cap: model.outcomeCap,
-                        dayLabel: dayLabel.startsWith('on ')
-                            ? 'this day'
-                            : dayLabel,
-                        onDone: (t) => _act(ItemAction.done, t),
-                        onTap: (t) => _edit(model, t),
-                        onReorder: model.reorderOutcomes,
-                        onAdd: () => ItemSheet.show(
-                          context,
-                          model: model,
-                          draft: Task(
-                            title: '',
-                            durationMinutes: 60,
-                            type: TaskType.floating,
-                            isOutcome: true,
-                            date: model.viewedDate,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 28),
-                      AgendaList(
-                        schedule: model.schedule,
-                        tasks: model.tasks,
-                        current: current,
-                        onTap: (t) => _edit(model, t),
-                      ),
                     ],
                   ),
                 ),
@@ -197,6 +167,93 @@ class _DayScreenState extends State<DayScreen> {
     );
   }
 
+  /// The usual sections, once the day has something of your own on it.
+  List<Widget> _daySections(
+    DayPlannerModel model, {
+    required LoadBreakdown load,
+    required String dayLabel,
+    required bool isToday,
+    required ScheduledTask? current,
+  }) => [
+    LoadBar(load: load, dayLabel: dayLabel),
+    if (model.suggestion != null) ...[
+      const SizedBox(height: 20),
+      SuggestionBanner(
+        suggestion: model.suggestion!,
+        onAccept: model.acceptSuggestion,
+        onDismiss: model.dismissSuggestion,
+      ),
+    ],
+    if (model.missedItems.isNotEmpty) ...[
+      const SizedBox(height: 20),
+      MissedList(
+        tasks: model.missedItems,
+        nextDayLabel: AppUtils.friendlyDate(
+          AppUtils.nextWorkday(model.viewedDate),
+          DateTime.now(),
+        ),
+        onLaterToday: (t) => _laterToday(model, t),
+        onNextDay: (t) => _act(ItemAction.tomorrow, t),
+        onDone: (t) => _act(ItemAction.done, t),
+        fitsToday: (t) => model.fitsLaterToday(t.id),
+      ),
+    ],
+    if (isToday) ...[
+      const SizedBox(height: 20),
+      NowCard(
+        item: current,
+        hasAnyTasks: model.tasks.isNotEmpty,
+        onStart: () => _act(ItemAction.start, current!.task),
+        onDone: () => _act(ItemAction.done, current!.task),
+        onCancel: () => _act(ItemAction.cancel, current!.task),
+        onTap: () => _edit(model, current!.task),
+        onReview: () => ReviewScreen.open(context),
+        running: model.runningBehindCurrent,
+        startingSoon: model.fixedItemStartingSoon,
+        onPause: () {
+          final running = model.runningBehindCurrent;
+          if (running != null) _pause(model, running.task);
+        },
+        onPauseCurrent: () {
+          if (current != null) _pause(model, current.task);
+        },
+      ),
+    ],
+    const SizedBox(height: 28),
+    OutcomesList(
+      tasks: model.tasks.where((t) => t.isOutcome).toList(),
+      schedule: model.schedule,
+      cap: model.outcomeCap,
+      dayLabel: dayLabel.startsWith('on ') ? 'this day' : dayLabel,
+      onDone: (t) => _act(ItemAction.done, t),
+      onTap: (t) => _edit(model, t),
+      onReorder: model.reorderOutcomes,
+      onAdd: () => ItemSheet.show(
+        context,
+        model: model,
+        draft: Task(
+          title: '',
+          durationMinutes: 60,
+          type: TaskType.floating,
+          isOutcome: true,
+          date: model.viewedDate,
+        ),
+      ),
+    ),
+    const SizedBox(height: 28),
+    _agenda(model, current),
+  ];
+
+  Widget _agenda(DayPlannerModel model, ScheduledTask? current) => AgendaList(
+    schedule: model.schedule,
+    tasks: model.tasks,
+    current: current,
+    onTap: (t) => _edit(model, t),
+    dayStartHour: model.workdayStartHour,
+    dayEndHour: model.workdayEndHour,
+    isToday: model.isViewingToday,
+  );
+
   /// Parses capture shorthand, reading day words from today and times
   /// without am/pm against the workday.
   ParsedCapture _parse(DayPlannerModel model, String raw) =>
@@ -207,21 +264,23 @@ class _DayScreenState extends State<DayScreen> {
         workdayEndHour: model.workdayEndHour,
       );
 
-  /// Builds a task from capture shorthand: parsed duration (default 30m),
-  /// a parsed time makes it Set-time, `*` makes it an Outcome. The day
-  /// named in the text is ignored here (see [_capture]).
+  /// Builds a task from capture shorthand: parsed duration (default 30m,
+  /// or 1h for an Outcome), a parsed time makes it Set-time, `*` or
+  /// [asOutcome] makes it an Outcome. The day named in the text is
+  /// ignored here (see [_capture]).
   Task _fromCapture(
     DayPlannerModel model,
     String raw, {
     bool interruption = false,
+    bool asOutcome = false,
   }) {
     final p = _parse(model, raw);
     return Task(
       title: p.title.isEmpty ? raw.trim() : p.title,
-      durationMinutes: p.durationMinutes ?? 30,
+      durationMinutes: p.durationMinutes ?? (asOutcome ? 60 : 30),
       type: p.startTime != null ? TaskType.pinned : TaskType.floating,
       startTime: p.startTime,
-      isOutcome: p.isOutcome,
+      isOutcome: asOutcome || p.isOutcome,
       isInterruption: interruption,
       date: model.viewedDate,
     );
@@ -229,8 +288,8 @@ class _DayScreenState extends State<DayScreen> {
 
   /// Adds straight away and confirms with an Edit shortcut; if the model
   /// rejects it (overlap, cap, out of range), opens the sheet to fix it.
-  void _capture(DayPlannerModel model, String raw) {
-    final task = _fromCapture(model, raw);
+  void _capture(DayPlannerModel model, String raw, {bool asOutcome = false}) {
+    final task = _fromCapture(model, raw, asOutcome: asOutcome);
     final date = _parse(model, raw).date;
     if (date != null && date != model.viewedDate) {
       _captureToDay(model, task, date);
@@ -332,17 +391,55 @@ class _DayScreenState extends State<DayScreen> {
     return parts.join(' · ');
   }
 
-  void _edit(DayPlannerModel model, Task task) {
+  /// Opens [task] in the item sheet. If a saved edit moves Anytime work
+  /// to a new time, says where it went, with Undo.
+  Future<void> _edit(DayPlannerModel model, Task task) async {
     final index = model.tasks.indexWhere((t) => t.id == task.id);
-    ItemSheet.show(
+    final startBefore = _firstStart(model, task.id);
+    var actionTaken = false;
+    final saved = await ItemSheet.show(
       context,
       model: model,
       existing: task,
-      onAction: _act,
+      onAction: (action, t) {
+        actionTaken = true;
+        _act(action, t);
+      },
       onDeleted: (deleted) => _snack(
         'Deleted "${deleted.title}"',
         undo: () => model.addTask(deleted, index: index),
       ),
+    );
+    if (saved != true || actionTaken || !mounted) return;
+    final updated = model.tasks.where((t) => t.id == task.id).firstOrNull;
+    if (updated == null || updated.type != TaskType.floating) return;
+    final startAfter = _firstStart(model, task.id);
+    if (startAfter == null || startAfter == startBefore) return;
+    _snack(
+      'Moved "${updated.title}" to ${AppUtils.formatClock(startAfter)}',
+      undo: () => model.updateTask(task.id, task),
+    );
+  }
+
+  /// When [id]'s first (or only) session starts, or `null` if unplaced.
+  static int? _firstStart(DayPlannerModel model, String id) {
+    final starts = [
+      for (final st in model.schedule.committed)
+        if (st.task.id == id) st.startMinutes,
+    ];
+    return starts.isEmpty ? null : starts.reduce((a, b) => a < b ? a : b);
+  }
+
+  /// Plans a missed set-time item into later today, with Undo.
+  void _laterToday(DayPlannerModel model, Task task) {
+    final before = model.planLaterToday(task.id);
+    if (before == null) return;
+    final start = _firstStart(model, task.id);
+    _snack(
+      start == null
+          ? "\"${task.title}\" doesn't fit today"
+          : 'Planned "${task.title}" for ${AppUtils.formatClock(start)}',
+      undo: () => model.updateTask(before.id, before),
     );
   }
 
@@ -379,7 +476,7 @@ class _DayScreenState extends State<DayScreen> {
       case ItemAction.cancel:
         model.cancelTask(task.id);
         _snack(
-          'Cancelled "${task.title}"',
+          "Won't do: \"${task.title}\"",
           undo: () => model.updateTask(task.id, task),
         );
       case ItemAction.tomorrow:
@@ -444,6 +541,11 @@ class _DayScreenState extends State<DayScreen> {
       ..showSnackBar(
         SnackBar(
           content: Text(message),
+          // With an action Flutter keeps a toast up until dismissed; let
+          // it go after a few seconds so it doesn't cover the schedule.
+          persist: false,
+          // Long enough to read and reach Undo.
+          duration: const Duration(seconds: 8),
           action: action == null
               ? null
               : SnackBarAction(

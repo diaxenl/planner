@@ -50,7 +50,13 @@ class _InterruptionSheetState extends State<InterruptionSheet> {
       padding: EdgeInsets.only(
         left: 20,
         right: 20,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+        // Keyboard height plus the system nav area (Android buttons /
+        // gesture bar, iOS home indicator); `padding` already shrinks
+        // to zero under an open keyboard, so the two never double up.
+        bottom:
+            MediaQuery.viewInsetsOf(context).bottom +
+            MediaQuery.paddingOf(context).bottom +
+            20,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,

@@ -3,15 +3,16 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:planner/app.dart';
 import 'package:planner/core/utils.dart';
+import 'package:planner/features/day/widgets/capture_bar.dart';
 import 'package:planner/state/day_planner_model.dart';
 import 'package:planner/state/day_planner_provider.dart';
 import 'package:planner/state/settings_model.dart';
 import 'package:planner/state/settings_provider.dart';
 
 Widget _app(DayPlannerModel model, SettingsModel settings) => SettingsProvider(
-      model: settings,
-      child: DayPlannerProvider(model: model, child: const HyperDayApp()),
-    );
+  model: settings,
+  child: DayPlannerProvider(model: model, child: const HyperDayApp()),
+);
 
 void main() {
   testWidgets('DayScreen shows today, dark by default', (tester) async {
@@ -51,7 +52,14 @@ void main() {
     final settings = SettingsModel();
     await tester.pumpWidget(_app(model, settings));
 
-    await tester.enterText(find.byType(TextField), 'Call Bob 20m *');
+    // The capture bar's field (an empty day also shows the start prompt's).
+    await tester.enterText(
+      find.descendant(
+        of: find.byType(CaptureBar),
+        matching: find.byType(TextField),
+      ),
+      'Call Bob 20m *',
+    );
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pump();
 

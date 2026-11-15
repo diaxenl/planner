@@ -40,14 +40,14 @@ void main() {
     expect(find.text('Hiring plan'), findsOneWidget);
     expect(find.text('Inbox'), findsOneWidget);
 
-    await tester.tap(find.text('Drop').last);
+    await tester.tap(find.text("Won't do").last);
     await tester.pump();
     expect(model.tasks.firstWhere((x) => x.id == other.id).status,
         TaskStatus.cancelled);
     expect(find.text('Inbox'), findsNothing);
 
     // Dropping an open Outcome here doesn't rewrite the day's score.
-    await tester.tap(find.text('Drop').first);
+    await tester.tap(find.text("Won't do").first);
     await tester.pump();
     expect(find.text('1 / 2'), findsOneWidget);
     expect(find.text('Hiring plan'), findsNothing);

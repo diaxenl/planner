@@ -50,13 +50,10 @@ class ScheduleSuggestion {
 
   /// A short human-readable headline.
   String get summary {
-    if (pushedOut.length == 1 && moves.isEmpty) {
-      return '"${pushedOut.single.title}" no longer fits.';
-    }
-    if (pushedOut.isNotEmpty) {
-      return '${pushedOut.length + moves.length} things were affected.';
-    }
-    if (moves.length == 1) return '"${moves.single.task.title}" moved later.';
-    return '${moves.length} outcomes moved later.';
+    if (moves.isEmpty) return 'Not enough time left today.';
+    if (pushedOut.isNotEmpty) return 'Some work moved or no longer fits.';
+    return moves.length == 1
+        ? 'An outcome moved later.'
+        : '${moves.length} outcomes moved later.';
   }
 }

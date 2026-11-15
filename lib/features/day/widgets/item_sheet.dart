@@ -82,6 +82,9 @@ class _ItemSheetState extends State<ItemSheet> {
   Repeat? _repeat;
   String? _error;
 
+  /// A calendar save is under way (Save is disabled meanwhile).
+  bool _saving = false;
+
   bool get _isEdit => widget.existing != null;
 
   @override
@@ -131,7 +134,13 @@ class _ItemSheetState extends State<ItemSheet> {
       padding: EdgeInsets.only(
         left: 20,
         right: 20,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+        // Keyboard height plus the system nav area (Android buttons /
+        // gesture bar, iOS home indicator); `padding` already shrinks
+        // to zero under an open keyboard, so the two never double up.
+        bottom:
+            MediaQuery.viewInsetsOf(context).bottom +
+            MediaQuery.paddingOf(context).bottom +
+            20,
       ),
       child: SingleChildScrollView(
         child: Column(
@@ -157,25 +166,7 @@ class _ItemSheetState extends State<ItemSheet> {
             ),
             const SizedBox(height: 16),
             _label(context, 'HOW LONG'),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                for (final m in _durationPresets)
-                  _Choice(
-                    label: AppUtils.formatDuration(m),
-                    selected: _duration == m,
-                    onTap: () => setState(() => _duration = m),
-                  ),
-                _Choice(
-                  label: _durationPresets.contains(_duration)
-                      ? 'Other…'
-                      : AppUtils.formatDuration(_duration),
-                  selected: !_durationPresets.contains(_duration),
-                  onTap: _pickDuration,
-                ),
-              ],
-            ),
+            _durationChoices(),
             const SizedBox(height: 16),
             _label(context, 'WHEN'),
             SegmentedButton<TaskType>(
@@ -204,17 +195,7 @@ class _ItemSheetState extends State<ItemSheet> {
               TaskType.hard =>
                 'A fixed commitment. Never moved, nothing booked over it.',
             }, style: text.bodyMedium),
-            if (needsTime) ...[
-              const SizedBox(height: 8),
-              OutlinedButton(
-                onPressed: _pickTime,
-                child: Text(
-                  _startTime == null
-                      ? 'Pick a start time'
-                      : 'Starts ${AppUtils.formatClock(_startTime!.hour * 60 + _startTime!.minute)}',
-                ),
-              ),
-            ],
+            if (needsTime) ...[const SizedBox(height: 8), _startButton()],
             const SizedBox(height: 8),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
@@ -279,7 +260,7 @@ class _ItemSheetState extends State<ItemSheet> {
     );
   }
 
-  /// Start / Done / Cancel / Tomorrow, as allowed by the item's status.
+  /// Start / Done / Won't do / Tomorrow, as allowed by the item's status.
   Widget _actions(BuildContext context, Task task) {
     final notStarted = task.status == TaskStatus.notStarted;
     final inProgress = task.status == TaskStatus.inProgress;
@@ -287,7 +268,7 @@ class _ItemSheetState extends State<ItemSheet> {
       return Padding(
         padding: const EdgeInsets.only(top: 4),
         child: Text(
-          task.status == TaskStatus.complete ? 'Done' : 'Cancelled',
+          task.status == TaskStatus.complete ? 'Done' : "Won't do",
           style: Theme.of(context).textTheme.bodyMedium,
         ),
       );
@@ -324,7 +305,7 @@ class _ItemSheetState extends State<ItemSheet> {
         children: [
           if (notStarted && !isMeeting) action('Start', ItemAction.start),
           if (!isMeeting) action('Done', ItemAction.done),
-          action('Cancel', ItemAction.cancel),
+          action("Won't do", ItemAction.cancel),
           if (canDoNext) action('Do next', ItemAction.doNext),
           if (notStarted) action(nextDay, ItemAction.tomorrow),
           if (notStarted) action('Pick a day…', ItemAction.pickDay),
@@ -333,30 +314,146 @@ class _ItemSheetState extends State<ItemSheet> {
     );
   }
 
+  /// Length presets plus "Other…".
+  Widget _durationChoices() => Wrap(
+    spacing: 6,
+    runSpacing: 6,
+    children: [
+      for (final m in _durationPresets)
+        _Choice(
+          label: AppUtils.formatDuration(m),
+          selected: _duration == m,
+          onTap: () => setState(() => _duration = m),
+        ),
+      _Choice(
+        label: _durationPresets.contains(_duration)
+            ? 'Other…'
+            : AppUtils.formatDuration(_duration),
+        selected: !_durationPresets.contains(_duration),
+        onTap: _pickDuration,
+      ),
+    ],
+  );
+
+  Widget _startButton() => OutlinedButton(
+    onPressed: _pickTime,
+    child: Text(
+      _startTime == null
+          ? 'Pick a start time'
+          : 'Starts ${AppUtils.formatClock(_startTime!.hour * 60 + _startTime!.minute)}',
+    ),
+  );
+
+  /// A meeting from the phone's calendar: name, start, and length can be
+  /// changed here and are saved back to the calendar. When that isn't
+  /// possible (a repeating meeting, a read-only calendar) it says why.
   Widget _importedView(BuildContext context, Task task) {
+    final colors = HyperColors.of(context);
     final text = Theme.of(context).textTheme;
     final start = task.startTime!.hour * 60 + task.startTime!.minute;
+    final why = widget.model.whyNotEditable(task);
+    final padding = EdgeInsets.fromLTRB(
+      20,
+      0,
+      20,
+      MediaQuery.viewInsetsOf(context).bottom +
+          MediaQuery.paddingOf(context).bottom +
+          20,
+    );
+
+    if (why != null) {
+      return Padding(
+        padding: padding,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(task.title, style: text.titleLarge),
+            const SizedBox(height: 6),
+            Text(
+              '${AppUtils.formatClock(start)}–'
+              '${AppUtils.formatClock(start + task.durationMinutes)}',
+              style: text.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            Text(why, style: text.bodyMedium),
+            const SizedBox(height: 12),
+          ],
+        ),
+      );
+    }
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(task.title, style: text.titleLarge),
-          const SizedBox(height: 6),
-          Text(
-            '${AppUtils.formatClock(start)}–'
-            '${AppUtils.formatClock(start + task.durationMinutes)}',
-            style: text.bodySmall,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'From your calendar. Edit it in your calendar app.',
-            style: text.bodyMedium,
-          ),
-        ],
+      padding: padding,
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Edit meeting', style: text.titleLarge),
+            const SizedBox(height: 4),
+            Text('Changes are saved to your calendar.', style: text.bodyMedium),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _title,
+              maxLength: AppConstants.titleMaxLength,
+              textCapitalization: TextCapitalization.sentences,
+              style: text.bodyLarge,
+              decoration: const InputDecoration(
+                hintText: 'What is it?',
+                counterText: '',
+              ),
+            ),
+            const SizedBox(height: 16),
+            _label(context, 'WHEN'),
+            _startButton(),
+            const SizedBox(height: 16),
+            _label(context, 'HOW LONG'),
+            _durationChoices(),
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                _error!,
+                style: text.bodyMedium?.copyWith(color: colors.accent),
+              ),
+            ],
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: _saving ? null : () => _saveImported(task),
+              child: Text(_saving ? 'Saving…' : 'Save'),
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  Future<void> _saveImported(Task task) async {
+    final title = _title.text.trim();
+    if (title.isEmpty) {
+      setState(() => _error = 'Give it a name.');
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await widget.model.updateImported(
+        task,
+        title: title,
+        start: _startTime!,
+        durationMinutes: _duration,
+      );
+    } on ArgumentError catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = e.message.toString();
+      });
+      return;
+    }
+    if (mounted) Navigator.of(context).pop(true);
   }
 
   Widget _label(BuildContext context, String label) => Padding(
