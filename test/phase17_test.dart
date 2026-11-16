@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:planner/core/utils.dart';
 import 'package:planner/models/recurring_task.dart';
-import 'package:planner/models/settings.dart';
 import 'package:planner/models/task.dart';
 import 'package:planner/services/capture_parser.dart';
 import 'package:planner/services/day_repository.dart';
@@ -272,42 +271,6 @@ void main() {
       expect(RecurringTask.fromJson(weekly.toJson())!.repeat, Repeat.weekly);
     });
 
-    test('breathing room gives way when it would push work out', () async {
-      // A 2-hour workday with 15 minutes of breathing room.
-      model
-        ..setWorkday(8, 10)
-        ..setBufferMinutes(15);
-      await model.loadDate(future);
-      final a = Task(
-        title: 'A',
-        durationMinutes: 60,
-        type: TaskType.floating,
-        date: future,
-      );
-      final b = a.copyWith(id: 'b', title: 'B', durationMinutes: 30);
-      model
-        ..addTask(a)
-        ..addTask(b);
-      // 30m + 15m + 60m fits: the room is kept (B first, shorter).
-      expect(model.schedule.overflow, isEmpty);
-      expect(
-        model.schedule.committed
-            .firstWhere((st) => st.task.id == a.id)
-            .startMinutes,
-        8 * 60 + 45,
-      );
-
-      // 50m + 15m + 60m doesn't, but 50m + 60m does: the room gives way.
-      model.updateTask(b.id, b.copyWith(durationMinutes: 50));
-      expect(model.schedule.overflow, isEmpty);
-      expect(
-        model.schedule.committed
-            .firstWhere((st) => st.task.id == a.id)
-            .startMinutes,
-        8 * 60 + 50,
-      );
-    });
-
     test('lastSevenDays returns the viewed day and the six before', () async {
       final earlier = future.subtract(const Duration(days: 3));
       await repo.save(earlier, [
@@ -329,12 +292,6 @@ void main() {
       expect(DayStats.outcomesHit(tasks), (1, 1));
       expect(DayStats.workedMinutes(tasks), (30, 30));
     });
-  });
-
-  test('breathing room round-trips; invalid falls back to 5m', () {
-    const s = Settings(bufferMinutes: 10);
-    expect(Settings.fromJson(s.toJson()).bufferMinutes, 10);
-    expect(Settings.fromJson({'bufferMinutes': 7}).bufferMinutes, 5);
   });
 }
 

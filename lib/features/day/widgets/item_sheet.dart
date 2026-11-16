@@ -79,6 +79,7 @@ class _ItemSheetState extends State<ItemSheet> {
   late TaskType _type;
   TimeOfDay? _startTime;
   late bool _isOutcome;
+  late TaskPriority _priority;
   Repeat? _repeat;
   String? _error;
 
@@ -96,6 +97,7 @@ class _ItemSheetState extends State<ItemSheet> {
     _type = t?.type ?? TaskType.floating;
     _startTime = t?.startTime;
     _isOutcome = t?.isOutcome ?? false;
+    _priority = t?.priority ?? TaskPriority.normal;
     final existing = widget.existing;
     _repeat = existing == null ? null : widget.model.repeatOf(existing);
   }
@@ -210,6 +212,28 @@ class _ItemSheetState extends State<ItemSheet> {
               value: _isOutcome,
               onChanged: atCap ? null : (v) => setState(() => _isOutcome = v),
             ),
+            if (_type == TaskType.floating && !_isOutcome) ...[
+              const SizedBox(height: 8),
+              _label(context, 'PRIORITY'),
+              SegmentedButton<TaskPriority>(
+                showSelectedIcon: false,
+                segments: const [
+                  ButtonSegment(value: TaskPriority.high, label: Text('High')),
+                  ButtonSegment(
+                    value: TaskPriority.normal,
+                    label: Text('Normal'),
+                  ),
+                  ButtonSegment(value: TaskPriority.low, label: Text('Low')),
+                ],
+                selected: {_priority},
+                onSelectionChanged: (s) => setState(() => _priority = s.first),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Free time goes to higher priority first.',
+                style: text.bodyMedium,
+              ),
+            ],
             const SizedBox(height: 8),
             _label(context, 'REPEAT'),
             Wrap(
@@ -513,6 +537,7 @@ class _ItemSheetState extends State<ItemSheet> {
             type: _type,
             startTime: () => _startTime,
             isOutcome: _isOutcome,
+            priority: _priority,
           ),
         );
       } else {
@@ -523,6 +548,7 @@ class _ItemSheetState extends State<ItemSheet> {
           type: _type,
           startTime: _startTime,
           isOutcome: _isOutcome,
+          priority: _priority,
           isInterruption: base?.isInterruption ?? false,
           date: model.viewedDate,
         );

@@ -36,14 +36,12 @@ List<Task> _meetings() => [
   _meeting('Kids pickup', 17, 30, 30),
 ];
 
-DaySchedule _run(List<Task> tasks, {int buffer = 0, int? now}) =>
-    Scheduler.schedule(
-      tasks,
-      dayStartHour: 8,
-      dayEndHour: 18,
-      nowMinutes: now,
-      bufferMinutes: buffer,
-    );
+DaySchedule _run(List<Task> tasks, {int? now}) => Scheduler.schedule(
+  tasks,
+  dayStartHour: 8,
+  dayEndHour: 18,
+  nowMinutes: now,
+);
 
 List<ScheduledTask> _sessions(DaySchedule s, Task t) =>
     s.committed.where((st) => st.task.id == t.id).toList();
@@ -132,33 +130,6 @@ void main() {
       ).copyWith(actualDurationMinutes: () => 60);
       final s = _run([o]);
       expect(_sessions(s, o).single.durationMinutes, 30);
-    });
-  });
-
-  group('Phase 17 — breathing room', () {
-    test('a buffer is kept after meetings and between items', () {
-      final a = _work('A', 30);
-      final b = _work('B', 30);
-      final s = Scheduler.schedule(
-        [_meeting('M', 8, 0, 30), a, b],
-        dayStartHour: 8,
-        dayEndHour: 18,
-        bufferMinutes: 10,
-      );
-      expect(_sessions(s, a).single.startMinutes, 8 * 60 + 40);
-      expect(_sessions(s, b).single.startMinutes, 9 * 60 + 20);
-    });
-
-    test('a buffer is kept before a meeting, not at the day start', () {
-      final a = _work('A', 30);
-      final s = Scheduler.schedule(
-        [_meeting('M', 8, 35, 30), a],
-        dayStartHour: 8,
-        dayEndHour: 18,
-        bufferMinutes: 10,
-      );
-      // 8:00–8:25 is only 25m, so A goes after the meeting + buffer.
-      expect(_sessions(s, a).single.startMinutes, 9 * 60 + 15);
     });
   });
 

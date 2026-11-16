@@ -173,6 +173,14 @@ From the second new-user test (2026-11-13). Owner chose #1–3, #4 as a visual (
 - [x] Tests (`phase20_test.dart`)
 - [ ] Validation: analyze clean, tests green (same pre-existing review test failure), rendered screenshots reviewed; **remaining: calendar write-back on a real Android/iOS device**
 
+## Phase 22 — Fill Free Time, Priority, No Breathing Room
+Owner feedback (2026-11-16): finishing a task doesn't pull other work into the freed time; anything not pinned down should be re-optimized when free time shows up; wants a priority system; breathing room around meetings feels awkward. Owner chose High / Normal / Low on items, and best fit (each item takes the earliest gap it fits).
+- [x] A set-time item finished early frees the rest of its slot; one marked "Won't do" frees all of it. Anytime work moves into that time (still drawn on the timeline where it was). Set-time items and meetings are never moved
+- [x] Priority (High / Normal / Low, default Normal) on Anytime items that aren't Outcomes, in the item sheet; saved with the task (old data reads as Normal). Fill order: Do next → Outcomes (drag order) → High → Normal → Low, shorter first within each
+- [x] Breathing room setting removed (Settings screen, settings file, scheduler); a saved value is ignored
+- [x] Tests (`phase22_test.dart`); Phase 17 breathing-room tests removed
+- [ ] Validation: analyze clean, tests green (same pre-existing review test failure); **remaining: check on a device** (phone disconnected)
+
 ---
 
 **Current status:** Engine (Phases 1–9) complete. Phases 10–13, 15, 16 and 17 complete (17 awaiting a live persona re-run). Phase 14 code complete with `device_calendar` 4.3.3 (owner-approved 2026-11-05); **remaining: Android SDK install (+ Windows Developer Mode for plugin builds) and a real-device check with Google, Microsoft and iCloud accounts.**

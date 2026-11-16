@@ -103,21 +103,6 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
-  int _bufferMinutes = 0;
-
-  /// Breathing room kept between planned items (Settings). Dropped for
-  /// the day when keeping it would push work out of the day.
-  int get bufferMinutes => _bufferMinutes;
-
-  /// Changes the breathing room and replans. Work that no longer fits is
-  /// reported as a suggestion.
-  void setBufferMinutes(int minutes) {
-    if (minutes == _bufferMinutes) return;
-    _bufferMinutes = minutes;
-    _rescheduleAndDiff();
-    notifyListeners();
-  }
-
   bool _isLoading = false;
 
   /// True while an async load is in progress.
@@ -877,25 +862,13 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     );
   }
 
-  /// Plans [input] in the workday. Breathing room gives way on a full
-  /// day: it is kept only if it doesn't push more work out of the day.
-  DaySchedule _plan(List<Task> input, int? nowMinutes) {
-    DaySchedule plan(int buffer) => Scheduler.schedule(
-      input,
-      dayStartHour: _workdayStartHour,
-      dayEndHour: _workdayEndHour,
-      nowMinutes: nowMinutes,
-      bufferMinutes: buffer,
-    );
-    var result = plan(_bufferMinutes);
-    if (_bufferMinutes > 0 && result.overflow.isNotEmpty) {
-      final tight = plan(0);
-      int lost(DaySchedule s) =>
-          s.overflow.fold(0, (sum, t) => sum + t.remainingMinutes);
-      if (lost(tight) < lost(result)) result = tight;
-    }
-    return result;
-  }
+  /// Plans [input] in the workday.
+  DaySchedule _plan(List<Task> input, int? nowMinutes) => Scheduler.schedule(
+    input,
+    dayStartHour: _workdayStartHour,
+    dayEndHour: _workdayEndHour,
+    nowMinutes: nowMinutes,
+  );
 
   /// The current time in minutes from midnight when viewing today,
   /// floored to 5 minutes so planned times move in calm steps rather than
@@ -1093,6 +1066,11 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     final fixedBlocks = <(int, int)>[];
     for (final t in [..._eventTasks, ..._tasks]) {
       if (_heldStarts.containsKey(t.id)) continue;
+      // Finished items free their time (see Scheduler).
+      if (t.status == TaskStatus.complete ||
+          t.status == TaskStatus.cancelled) {
+        continue;
+      }
       if (t.status == TaskStatus.inProgress && t.startedAt != null) {
         final start = t.startedAt!.hour * 60 + t.startedAt!.minute;
         final elapsed = nowMinutes - start;
@@ -1167,7 +1145,8 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
         oldTask.status != newTask.status ||
         oldTask.startedAt != newTask.startedAt ||
         oldTask.actualDurationMinutes != newTask.actualDurationMinutes ||
-        oldTask.doNextAt != newTask.doNextAt;
+        oldTask.doNextAt != newTask.doNextAt ||
+        oldTask.priority != newTask.priority;
   }
 
   // ── Overrun monitoring ──────────────────────────────────────────────

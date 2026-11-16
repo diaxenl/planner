@@ -75,6 +75,8 @@ void main() {
       await _open(tester, _Phone(calendars: 8));
       expect(find.byIcon(Icons.check_circle), findsNothing);
 
+      await tester.ensureVisible(find.text('Allow calendar access'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Allow calendar access'));
       await tester.pumpAndSettle();
 

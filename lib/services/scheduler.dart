@@ -10,7 +10,13 @@ import '../models/task.dart';
 /// that places all hard/pinned tasks at their fixed positions and
 /// greedily fills remaining gaps with floating tasks — "Do next" work
 /// first (latest choice first); then Outcomes, in the order they are
-/// listed; then other work, shorter first.
+/// listed; then other work by priority (High, Normal, Low), shorter first
+/// within each.
+///
+/// Each item takes the earliest gap it fits, so a short gap is filled by
+/// the most important work that fits in it. A set-time item that was
+/// finished early frees the rest of its slot, and one marked "Won't do"
+/// frees all of it.
 ///
 /// An Outcome that doesn't fit any single gap is split into sessions of
 /// at least [AppConstants.minSessionMinutes], earliest gaps first. Other
@@ -25,17 +31,12 @@ class Scheduler {
   /// tasks will only be placed into gaps that start at or after this time.
   /// If `null`, the full day window is used (useful for testing).
   ///
-  /// [bufferMinutes] of free time are kept after every fixed block and
-  /// every placed item, and before every fixed block (not at the edges of
-  /// the day window or at "now").
-  ///
   /// This is a pure function — no side effects, no state mutation.
   static DaySchedule schedule(
     List<Task> tasks, {
     required int dayStartHour,
     required int dayEndHour,
     int? nowMinutes,
-    int bufferMinutes = 0,
   }) {
     final dayStartMin = dayStartHour * 60;
     final dayEndMin = dayEndHour * 60;
@@ -75,9 +76,10 @@ class Scheduler {
 
     for (final task in tasks) {
       // Completed/cancelled tasks are a frozen historical record: if they
-      // already occupy a fixed slot (hard/pinned), that slot stays
-      // blocked; otherwise they are excluded rather than being (re-)
-      // placed by the greedy floating fill.
+      // have a fixed slot (hard/pinned) they stay on the timeline there,
+      // but only block time until they were finished (see step 2);
+      // otherwise they are excluded rather than being (re-)placed by the
+      // greedy floating fill.
       if (task.status == TaskStatus.complete ||
           task.status == TaskStatus.cancelled) {
         if (task.startTime != null) fixedTasks.add(task);
@@ -108,6 +110,31 @@ class Scheduler {
       );
     }).toList()..sort((a, b) => a.startMin.compareTo(b.startMin));
 
+    // Time a block keeps from floating work: all of it, except a finished
+    // item (only until it was finished) and a "Won't do" one (none).
+    // Fixed blocks that keep no time are still drawn, but open up their
+    // slot to the floating fill.
+    for (final b in fixedBlocks) {
+      final t = b.task;
+      if (t.status == TaskStatus.cancelled) {
+        b.freedFrom = b.startMin;
+      } else if (t.status == TaskStatus.complete && t.completedAt != null) {
+        final done = t.completedAt!;
+        final sameDay =
+            done.year == t.date.year &&
+            done.month == t.date.month &&
+            done.day == t.date.day;
+        if (sameDay || done.isBefore(t.date)) {
+          final doneMin = sameDay ? done.hour * 60 + done.minute : 0;
+          if (doneMin < b.endMin) b.freedFrom = doneMin;
+        }
+      }
+    }
+    final blocking = [
+      for (final b in fixedBlocks)
+        if (b.blockEndMin > b.startMin) b,
+    ];
+
     // A running floating Outcome stops at the next fixed block (or now,
     // if it has run into it); what's left is planned as later sessions.
     final remainders = <_Work>[];
@@ -120,7 +147,7 @@ class Scheduler {
       }
       final planned = b.startMin + t.remainingMinutes;
       int? nextStart;
-      for (final other in fixedBlocks) {
+      for (final other in blocking) {
         if (identical(other, b)) continue;
         if (other.startMin > b.startMin &&
             other.startMin < planned &&
@@ -150,35 +177,27 @@ class Scheduler {
     // ── 3. Compute free gaps ──────────────────────────────────────────
     // Gaps lie inside the day window only; fixed blocks outside it (an
     // early call, an evening event) are kept but never open up space.
-    // Breathing room is kept on each side of a fixed block.
+    // Only blocks that keep their time split the day into gaps.
     final gaps = <_Gap>[];
     var cursor = dayStartMin;
-    var afterBlock = false;
 
-    for (final block in fixedBlocks) {
-      final gapStart = cursor + (afterBlock ? bufferMinutes : 0);
-      final gapEnd = block.startMin < dayEndMin
-          ? block.startMin - bufferMinutes
-          : dayEndMin;
-      if (gapEnd > gapStart) {
-        gaps.add(_Gap(startMin: gapStart, endMin: gapEnd));
+    for (final block in blocking) {
+      final gapEnd = block.startMin < dayEndMin ? block.startMin : dayEndMin;
+      if (gapEnd > cursor) {
+        gaps.add(_Gap(startMin: cursor, endMin: gapEnd));
       }
-      if (block.endMin > cursor) {
-        cursor = block.endMin;
-        afterBlock = true;
-      }
+      if (block.blockEndMin > cursor) cursor = block.blockEndMin;
     }
     // Gap after the last fixed block.
-    final lastStart = cursor + (afterBlock ? bufferMinutes : 0);
-    if (lastStart < dayEndMin) {
-      gaps.add(_Gap(startMin: lastStart, endMin: dayEndMin));
+    if (cursor < dayEndMin) {
+      gaps.add(_Gap(startMin: cursor, endMin: dayEndMin));
     }
 
     // ── 4. Sort floating tasks ─────────────────────────────────────────
     // "Do next" first, latest choice first; then Outcomes in list order
-    // (the first one is the most important); then other work, shorter
-    // first. Ties keep input order (List.sort is not stable, so compare
-    // positions).
+    // (the first one is the most important); then other work by priority
+    // (High, Normal, Low), shorter first within each. Ties keep input
+    // order (List.sort is not stable, so compare positions).
     final position = {
       for (var i = 0; i < floatingTasks.length; i++) floatingTasks[i].id: i,
     };
@@ -190,6 +209,8 @@ class Scheduler {
       if (a.isOutcome || an != null) {
         return position[a.id]!.compareTo(position[b.id]!);
       }
+      final byPriority = a.priority.index.compareTo(b.priority.index);
+      if (byPriority != 0) return byPriority;
       final byLength = a.durationMinutes.compareTo(b.durationMinutes);
       return byLength != 0
           ? byLength
@@ -212,7 +233,7 @@ class Scheduler {
       );
       committed.add(st);
       sessions.putIfAbsent(work.task.id, () => []).add(st);
-      gap.startMin = start + minutes + bufferMinutes;
+      gap.startMin = start + minutes;
     }
 
     final queue = [
@@ -319,6 +340,13 @@ class _Block {
   final Task task;
   final int startMin;
   int endMin;
+
+  /// Set for an item finished early or marked "Won't do": where it stops
+  /// keeping time from floating work.
+  int? freedFrom;
+
+  /// Where the block stops keeping time from floating work.
+  int get blockEndMin => freedFrom ?? endMin;
 }
 
 /// A free gap between fixed blocks.
