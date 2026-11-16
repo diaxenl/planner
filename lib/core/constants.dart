@@ -36,10 +36,6 @@ class AppConstants {
   /// free gap.
   static const int minSessionMinutes = 30;
 
-  /// Breathing room (Settings) kept between planned items, in minutes.
-  static const List<int> bufferChoices = [0, 5, 10, 15];
-  static const int defaultBufferMinutes = 5;
-
   /// How long before a meeting the Now card warns that the running task
   /// is about to run into it.
   static const int meetingWarningMinutes = 5;

@@ -36,6 +36,10 @@ enum TaskStatus {
   cancelled,
 }
 
+/// How soon Anytime work should be fitted into free time. Outcomes and
+/// "Do next" work come before all of these.
+enum TaskPriority { high, normal, low }
+
 /// An immutable task entity.
 ///
 /// All fields are `final`. To change a field, use [copyWith] which returns
@@ -59,6 +63,7 @@ class Task {
     this.carriedFromDate,
     this.doNextAt,
     this.recurringId,
+    this.priority = TaskPriority.normal,
   }) : id = id ?? _generateId();
 
   /// Unique identifier — 16-character hex string.
@@ -122,6 +127,9 @@ class Task {
   /// one-off task. See `RecurringTask`.
   final String? recurringId;
 
+  /// Fill order among other Anytime work: High, then Normal, then Low.
+  final TaskPriority priority;
+
   /// Minutes still to plan: the estimate minus minutes already tracked on
   /// earlier, paused runs (never less than 5).
   int get remainingMinutes {
@@ -147,6 +155,7 @@ class Task {
     DateTime? Function()? carriedFromDate,
     DateTime? Function()? doNextAt,
     String? Function()? recurringId,
+    TaskPriority? priority,
   }) {
     return Task(
       id: id ?? this.id,
@@ -169,6 +178,7 @@ class Task {
           : this.carriedFromDate,
       doNextAt: doNextAt != null ? doNextAt() : this.doNextAt,
       recurringId: recurringId != null ? recurringId() : this.recurringId,
+      priority: priority ?? this.priority,
     );
   }
 
@@ -234,6 +244,7 @@ class Task {
       'carriedFromDate': carriedFromDate?.toIso8601String(),
       'doNextAt': doNextAt?.toIso8601String(),
       'recurringId': recurringId,
+      'priority': priority.name,
     };
   }
 
@@ -281,6 +292,10 @@ class Task {
           ? null
           : DateTime.parse(json['doNextAt'] as String);
       final recurringId = json['recurringId'] as String?;
+      final priority = TaskPriority.values
+              .where((p) => p.name == json['priority'])
+              .firstOrNull ??
+          TaskPriority.normal;
 
       return Task(
         id: id,
@@ -299,6 +314,7 @@ class Task {
         carriedFromDate: carriedFromDate,
         doNextAt: doNextAt,
         recurringId: recurringId,
+        priority: priority,
       );
     } catch (_) {
       return null;

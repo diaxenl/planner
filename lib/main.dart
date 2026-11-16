@@ -37,15 +37,13 @@ void main() async {
         ..setWorkday(
           settings.settings.workdayStartHour,
           settings.settings.workdayEndHour,
-        )
-        ..setBufferMinutes(settings.settings.bufferMinutes);
+        );
   settings.addListener(() {
     model.outcomeCap = settings.settings.outcomeCap;
     model.setWorkday(
       settings.settings.workdayStartHour,
       settings.settings.workdayEndHour,
     );
-    model.setBufferMinutes(settings.settings.bufferMinutes);
     final ids = settings.settings.selectedCalendarIds;
     if (ids != model.calendarIds) {
       model.calendarIds = ids;
