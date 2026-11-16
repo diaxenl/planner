@@ -30,6 +30,9 @@ class _EditableCalendar implements CalendarSource {
   Future<bool> requestAccess() async => true;
 
   @override
+  Future<bool> hasAccess() async => true;
+
+  @override
   Future<List<DeviceCalendarInfo>> listCalendars() async => const [];
 
   @override

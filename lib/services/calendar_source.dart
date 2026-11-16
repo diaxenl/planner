@@ -11,6 +11,9 @@ abstract class CalendarSource {
   /// granted.
   Future<bool> requestAccess();
 
+  /// Whether calendar access is granted, without asking.
+  Future<bool> hasAccess();
+
   /// Calendars available on the device.
   Future<List<DeviceCalendarInfo>> listCalendars();
 
@@ -37,6 +40,9 @@ class NoCalendarSource implements CalendarSource {
 
   @override
   Future<bool> requestAccess() async => false;
+
+  @override
+  Future<bool> hasAccess() async => false;
 
   @override
   Future<List<DeviceCalendarInfo>> listCalendars() async => const [];

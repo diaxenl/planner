@@ -20,13 +20,14 @@ class DeviceCalendarSource implements CalendarSource {
     return asked.isSuccess && asked.data == true;
   }
 
-  Future<bool> _hasAccess() async {
+  @override
+  Future<bool> hasAccess() async {
     final has = await _plugin.hasPermissions();
     return has.isSuccess && has.data == true;
   }
 
   Future<List<dc.Calendar>> _calendars() async {
-    if (!await _hasAccess()) return const [];
+    if (!await hasAccess()) return const [];
     final result = await _plugin.retrieveCalendars();
     if (!result.isSuccess) return const [];
     return [
@@ -98,7 +99,7 @@ class DeviceCalendarSource implements CalendarSource {
     if (event.eventId == null || event.isRecurring || event.isReadOnly) {
       return false;
     }
-    if (!await _hasAccess()) return false;
+    if (!await hasAccess()) return false;
     // Re-read the stored event so everything not edited here (notes,
     // place, guests, reminders) is saved back unchanged.
     final found = await _plugin.retrieveEvents(

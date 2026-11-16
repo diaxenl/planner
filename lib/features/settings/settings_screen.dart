@@ -25,7 +25,13 @@ class SettingsScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+        // Clear the system nav bar (Android buttons, iOS home indicator).
+        padding: EdgeInsets.fromLTRB(
+          20,
+          8,
+          20,
+          32 + MediaQuery.paddingOf(context).bottom,
+        ),
         children: [
           Text('APPEARANCE', style: text.labelSmall),
           const SizedBox(height: 12),
@@ -189,8 +195,10 @@ class _HourStepper extends StatelessWidget {
   }
 }
 
-/// Lists the phone's calendars with a switch each. No selection saved
-/// means all calendars are imported.
+/// The calendar connection, verified by reading the phone's calendars:
+/// a check with the count when connected, a hint when access is allowed
+/// but nothing was found, or the button to allow access. Below, a switch
+/// per calendar. No selection saved means all calendars are imported.
 class _CalendarPicker extends StatefulWidget {
   const _CalendarPicker();
 
@@ -199,74 +207,161 @@ class _CalendarPicker extends StatefulWidget {
 }
 
 class _CalendarPickerState extends State<_CalendarPicker> {
-  Future<List<DeviceCalendarInfo>>? _calendars;
+  /// The last check; `null` until the first one finishes.
+  CalendarCheck? _check;
+
+  /// A check (or the permission prompt) is under way. The last result
+  /// stays on screen meanwhile so the page doesn't jump.
+  bool _checking = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _calendars ??= DayPlannerProvider.of(context).listCalendars();
+    if (_check == null && !_checking) {
+      _checking = true;
+      _verify();
+    }
+  }
+
+  Future<void> _verify() async {
+    final result = await DayPlannerProvider.of(context).checkCalendars();
+    if (!mounted) return;
+    setState(() {
+      _check = result;
+      _checking = false;
+    });
   }
 
   Future<void> _allowAccess() async {
     final model = DayPlannerProvider.of(context);
+    setState(() => _checking = true);
     await model.requestCalendarAccess();
     if (!mounted) return;
-    setState(() => _calendars = model.listCalendars());
+    await _verify();
   }
 
   @override
   Widget build(BuildContext context) {
+    final colors = HyperColors.of(context);
     final text = Theme.of(context).textTheme;
     final settings = SettingsProvider.of(context);
     final selected = settings.settings.selectedCalendarIds;
+    final check = _check;
 
-    return FutureBuilder<List<DeviceCalendarInfo>>(
-      future: _calendars,
-      builder: (context, snapshot) {
-        final calendars = snapshot.data ?? const [];
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const SizedBox(height: 48);
-        }
-        if (calendars.isEmpty) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+    if (check == null) {
+      return _status(
+        context,
+        icon: Icons.sync,
+        color: colors.textMuted,
+        title: 'Checking calendars…',
+      );
+    }
+
+    final calendars = check.calendars;
+    if (!check.access) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Meetings are imported from the calendars on this phone — '
+            'Google, Microsoft (Outlook / 365) and iCloud. Make sure your '
+            'accounts are synced to the phone, then allow access.',
+            style: text.bodyMedium,
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton(
+            onPressed: _checking ? null : _allowAccess,
+            child: Text(_checking ? 'Checking…' : 'Allow calendar access'),
+          ),
+        ],
+      );
+    }
+
+    if (calendars.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _status(
+            context,
+            icon: Icons.error_outline,
+            color: colors.accent,
+            title: 'Access allowed, but no calendars found',
+            detail:
+                "Add your Google, Microsoft or iCloud account in the phone's "
+                'Settings → Accounts, then check again.',
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton(
+            onPressed: _checking ? null : _verify,
+            child: Text(_checking ? 'Checking…' : 'Check again'),
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _status(
+          context,
+          icon: Icons.check_circle,
+          color: colors.accent,
+          title:
+              'Connected · ${calendars.length} '
+              '${calendars.length == 1 ? 'calendar' : 'calendars'}',
+          detail:
+              'Meetings show on your schedule. Pull down on the day to '
+              'refresh.',
+        ),
+        const SizedBox(height: 8),
+        for (final cal in calendars)
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(cal.name, style: text.bodyLarge),
+            subtitle: cal.accountName == null
+                ? null
+                : Text(cal.accountName!, style: text.bodyMedium),
+            value: selected == null || selected.contains(cal.id),
+            onChanged: (on) {
+              final ids = selected ?? calendars.map((c) => c.id).toSet();
+              final next = {...ids};
+              on ? next.add(cal.id) : next.remove(cal.id);
+              settings.setSelectedCalendarIds(
+                next.length == calendars.length ? null : next,
+              );
+            },
+          ),
+      ],
+    );
+  }
+
+  /// An icon, a title, and optional detail below it.
+  Widget _status(
+    BuildContext context, {
+    required IconData icon,
+    required Color color,
+    required String title,
+    String? detail,
+  }) {
+    final text = Theme.of(context).textTheme;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 22, color: color),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Meetings are imported from the calendars on this phone — '
-                'Google, Microsoft (Outlook / 365) and iCloud. Make sure your '
-                'accounts are synced to the phone, then allow access.',
-                style: text.bodyMedium,
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton(
-                onPressed: _allowAccess,
-                child: const Text('Allow calendar access'),
-              ),
+              Text(title, style: text.bodyLarge),
+              if (detail != null) ...[
+                const SizedBox(height: 2),
+                Text(detail, style: text.bodyMedium),
+              ],
             ],
-          );
-        }
-        return Column(
-          children: [
-            for (final cal in calendars)
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text(cal.name, style: text.bodyLarge),
-                subtitle: cal.accountName == null
-                    ? null
-                    : Text(cal.accountName!, style: text.bodyMedium),
-                value: selected == null || selected.contains(cal.id),
-                onChanged: (on) {
-                  final ids = selected ?? calendars.map((c) => c.id).toSet();
-                  final next = {...ids};
-                  on ? next.add(cal.id) : next.remove(cal.id);
-                  settings.setSelectedCalendarIds(
-                    next.length == calendars.length ? null : next,
-                  );
-                },
-              ),
-          ],
-        );
-      },
+          ),
+        ),
+      ],
     );
   }
 }

@@ -34,6 +34,10 @@ class CalendarEvent {
   final bool isReadOnly;
 }
 
+/// The result of checking the calendar connection: whether access is
+/// granted, and the calendars actually read from the phone.
+typedef CalendarCheck = ({bool access, List<DeviceCalendarInfo> calendars});
+
 /// A calendar available on the device, for the Settings picker.
 class DeviceCalendarInfo {
   const DeviceCalendarInfo({

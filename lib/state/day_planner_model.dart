@@ -765,6 +765,19 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     await refreshCalendar();
   }
 
+  /// Verifies the calendar connection by actually reading the phone's
+  /// calendars: whether access is granted, and which calendars it found.
+  Future<CalendarCheck> checkCalendars() async {
+    try {
+      if (!await _calendarSource.hasAccess()) {
+        return (access: false, calendars: const <DeviceCalendarInfo>[]);
+      }
+      return (access: true, calendars: await _calendarSource.listCalendars());
+    } catch (_) {
+      return (access: false, calendars: const <DeviceCalendarInfo>[]);
+    }
+  }
+
   /// Calendars available on the device (for the Settings picker).
   Future<List<DeviceCalendarInfo>> listCalendars() async {
     try {

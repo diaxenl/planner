@@ -84,7 +84,13 @@ class _ReviewScreenState extends State<ReviewScreen> {
         ),
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+        // Clear the system nav bar (Android buttons, iOS home indicator).
+        padding: EdgeInsets.fromLTRB(
+          20,
+          8,
+          20,
+          32 + MediaQuery.paddingOf(context).bottom,
+        ),
         children: [
           // ── Outcomes hit ──
           Row(
