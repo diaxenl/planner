@@ -21,8 +21,8 @@ class DayPlannerProvider extends InheritedNotifier<DayPlannerModel> {
   /// Widgets that call this will rebuild when [DayPlannerModel] calls
   /// [ChangeNotifier.notifyListeners].
   static DayPlannerModel of(BuildContext context) {
-    final provider =
-        context.dependOnInheritedWidgetOfExactType<DayPlannerProvider>();
+    final provider = context
+        .dependOnInheritedWidgetOfExactType<DayPlannerProvider>();
     assert(provider != null, 'No DayPlannerProvider found in widget tree');
     return provider!.notifier!;
   }

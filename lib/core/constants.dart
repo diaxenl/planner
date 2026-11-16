@@ -5,25 +5,12 @@
 class AppConstants {
   AppConstants._();
 
-  // ── Day window ──────────────────────────────────────────────────────
-  /// Earliest hour shown on the timeline (inclusive).
-  static const int dayStartHour = 6;
-
-  /// Latest hour shown on the timeline (inclusive end label).
-  static const int dayEndHour = 23; // 11 PM
-
-  /// Total number of hour slots rendered on the timeline.
-  static int get totalHours => dayEndHour - dayStartHour; // 17
-
-  // ── Timeline dimensions ─────────────────────────────────────────────
-  /// Fixed pixel height for one hour on the timeline.
-  static const double hourHeight = 80.0;
-
-  /// Width reserved for the hour labels on the left edge.
-  static const double timeGutterWidth = 56.0;
-
-  /// Total pixel height of the scrollable timeline area.
-  static double get timelineHeight => hourHeight * totalHours;
+  // ── Workday ─────────────────────────────────────────────────────────
+  /// Default workday (Settings): work is planned, and free time counted,
+  /// only between these hours. Meetings and set-time items may sit
+  /// anywhere in the day.
+  static const int defaultWorkdayStartHour = 8;
+  static const int defaultWorkdayEndHour = 18; // 6 PM
 
   // ── Spacing ─────────────────────────────────────────────────────────
   static const double paddingSmall = 4.0;
@@ -44,4 +31,26 @@ class AppConstants {
   // ── Adaptive replanning ─────────────────────────────────────────────
   /// How often to re-check for task overruns while a task is in progress.
   static const Duration overrunCheckInterval = Duration(seconds: 30);
+
+  /// Shortest session an Outcome is split into when it doesn't fit one
+  /// free gap.
+  static const int minSessionMinutes = 30;
+
+  /// Breathing room (Settings) kept between planned items, in minutes.
+  static const List<int> bufferChoices = [0, 5, 10, 15];
+  static const int defaultBufferMinutes = 5;
+
+  /// How long before a meeting the Now card warns that the running task
+  /// is about to run into it.
+  static const int meetingWarningMinutes = 5;
+
+  /// How far the clock may push an Outcome later (while the user does
+  /// something else) before the day screen says so.
+  static const int outcomeSlipMinutes = 30;
+
+  // ── Outcomes ────────────────────────────────────────────────────────
+  /// Default and allowed range for the daily outcome cap (Settings).
+  static const int defaultOutcomeCap = 3;
+  static const int minOutcomeCap = 1;
+  static const int maxOutcomeCap = 5;
 }

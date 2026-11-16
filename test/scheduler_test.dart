@@ -34,14 +34,14 @@ void main() {
         title: 'Other',
         durationMinutes: 30,
         type: TaskType.floating,
-        priority: Priority.high,
+        isOutcome: true,
         date: _day,
       );
 
       final s = _run([active, other], nowMinutes: 9 * 60 + 15);
 
       expect(_startOf(s, active), 9 * 60);
-      // Higher-priority floating work must not displace active work.
+      // An Outcome must not displace active work.
       expect(_startOf(s, other), 10 * 60);
     });
 
@@ -121,6 +121,101 @@ void main() {
       final t = active();
       expect(t.isOverrunning(DateTime(2026, 10, 10, 9, 30)), isFalse);
       expect(t.isOverrunning(DateTime(2026, 10, 10, 9, 31)), isTrue);
+    });
+  });
+
+  group('Phase 10 — outcome-first ordering', () {
+    test('an Outcome is placed before shorter non-outcome work', () {
+      final small = Task(
+        title: 'Small',
+        durationMinutes: 15,
+        type: TaskType.floating,
+        date: _day,
+      );
+      final outcome = Task(
+        title: 'Outcome',
+        durationMinutes: 90,
+        type: TaskType.floating,
+        isOutcome: true,
+        date: _day,
+      );
+
+      final s = _run([small, outcome], nowMinutes: 9 * 60);
+
+      expect(_startOf(s, outcome), 9 * 60);
+      expect(_startOf(s, small), 10 * 60 + 30);
+    });
+
+    test('Outcomes keep the order they were added, not shortest first', () {
+      final big = Task(
+        title: 'Big',
+        durationMinutes: 90,
+        type: TaskType.floating,
+        isOutcome: true,
+        date: _day,
+      );
+      final small = Task(
+        title: 'Small',
+        durationMinutes: 30,
+        type: TaskType.floating,
+        isOutcome: true,
+        date: _day,
+      );
+
+      final s = _run([big, small], nowMinutes: 9 * 60);
+
+      expect(_startOf(s, big), 9 * 60);
+      expect(_startOf(s, small), 10 * 60 + 30);
+    });
+
+    test('without Outcomes, shorter work goes first', () {
+      final long = Task(
+        title: 'Long',
+        durationMinutes: 60,
+        type: TaskType.floating,
+        date: _day,
+      );
+      final short = Task(
+        title: 'Short',
+        durationMinutes: 15,
+        type: TaskType.floating,
+        date: _day,
+      );
+
+      final s = _run([long, short], nowMinutes: 9 * 60);
+
+      expect(_startOf(s, short), 9 * 60);
+      expect(_startOf(s, long), 9 * 60 + 15);
+    });
+  });
+
+  group('Workday window', () {
+    test('fixed blocks outside the window never open up space', () {
+      final evening = Task(
+        title: 'Dinner',
+        durationMinutes: 60,
+        type: TaskType.hard,
+        startTime: const TimeOfDay(hour: 19, minute: 0),
+        date: _day,
+      );
+      final work = Task(
+        title: 'Work',
+        durationMinutes: 60,
+        type: TaskType.floating,
+        date: _day,
+      );
+
+      final s = Scheduler.schedule(
+        [evening, work],
+        dayStartHour: 9,
+        dayEndHour: 17,
+        nowMinutes: 16 * 60 + 30,
+      );
+
+      // Only 30 minutes are left in the workday; the evening slot before
+      // dinner is not workday time.
+      expect(s.overflow.map((t) => t.id), [work.id]);
+      expect(_startOf(s, evening), 19 * 60);
     });
   });
 }

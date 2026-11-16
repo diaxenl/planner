@@ -14,13 +14,6 @@ enum TaskType {
   floating,
 }
 
-/// Priority level for ordering floating tasks during scheduling.
-enum Priority {
-  low,
-  medium,
-  high,
-}
-
 /// Lifecycle status of a task.
 ///
 /// Valid transitions: `notStarted` → `inProgress` → `complete`, or
@@ -55,13 +48,17 @@ class Task {
     required this.durationMinutes,
     required this.type,
     this.startTime,
-    this.priority = Priority.medium,
+    this.isOutcome = false,
+    this.isInterruption = false,
     this.status = TaskStatus.notStarted,
     this.completedAt,
     this.startedAt,
     this.actualDurationMinutes,
+    this.pausedRuns = const [],
     required this.date,
     this.carriedFromDate,
+    this.doNextAt,
+    this.recurringId,
   }) : id = id ?? _generateId();
 
   /// Unique identifier — 16-character hex string.
@@ -80,8 +77,13 @@ class Task {
   /// `null` for [TaskType.floating].
   final TimeOfDay? startTime;
 
-  /// Scheduling priority — higher priority floating tasks are placed first.
-  final Priority priority;
+  /// Whether this task is one of the day's Outcomes — the few things that
+  /// make the day a win. Outcome floating tasks are scheduled first.
+  final bool isOutcome;
+
+  /// Whether this task was captured as an interruption ("Something came
+  /// up"). Set by the capture flow only, never by hand.
+  final bool isInterruption;
 
   /// Lifecycle status of the task. See [TaskStatus] for valid transitions.
   final TaskStatus status;
@@ -95,9 +97,15 @@ class Task {
   /// on completion.
   final DateTime? startedAt;
 
-  /// Elapsed real time in minutes, recorded when the task is completed.
-  /// `null` until the task reaches [TaskStatus.complete].
+  /// Time spent, in minutes. On a completed task: the total tracked time
+  /// (or the estimate if nothing was tracked). Before completion: minutes
+  /// tracked on earlier runs that were paused, or `null`.
   final int? actualDurationMinutes;
+
+  /// When it was worked on before being paused, in order: each run from
+  /// its Start to its Pause. Kept so paused work stays on the timeline
+  /// where it happened. The current run (if any) starts at [startedAt].
+  final List<DateTimeRange> pausedRuns;
 
   /// The calendar day this task belongs to (date only, time ignored).
   final DateTime date;
@@ -106,6 +114,21 @@ class Task {
   /// `null` for tasks created on their native day.
   final DateTime? carriedFromDate;
 
+  /// When the user chose "Do next" for this task. Floating work marked
+  /// this way is planned before everything else, latest choice first.
+  final DateTime? doNextAt;
+
+  /// The repeating series this task was created from, or `null` for a
+  /// one-off task. See `RecurringTask`.
+  final String? recurringId;
+
+  /// Minutes still to plan: the estimate minus minutes already tracked on
+  /// earlier, paused runs (never less than 5).
+  int get remainingMinutes {
+    final left = durationMinutes - (actualDurationMinutes ?? 0);
+    return left < 5 ? 5 : left;
+  }
+
   /// Returns a new [Task] with the given fields replaced.
   Task copyWith({
     String? id,
@@ -113,13 +136,17 @@ class Task {
     int? durationMinutes,
     TaskType? type,
     TimeOfDay? Function()? startTime,
-    Priority? priority,
+    bool? isOutcome,
+    bool? isInterruption,
     TaskStatus? status,
     DateTime? Function()? completedAt,
     DateTime? Function()? startedAt,
     int? Function()? actualDurationMinutes,
+    List<DateTimeRange>? pausedRuns,
     DateTime? date,
     DateTime? Function()? carriedFromDate,
+    DateTime? Function()? doNextAt,
+    String? Function()? recurringId,
   }) {
     return Task(
       id: id ?? this.id,
@@ -127,16 +154,21 @@ class Task {
       durationMinutes: durationMinutes ?? this.durationMinutes,
       type: type ?? this.type,
       startTime: startTime != null ? startTime() : this.startTime,
-      priority: priority ?? this.priority,
+      isOutcome: isOutcome ?? this.isOutcome,
+      isInterruption: isInterruption ?? this.isInterruption,
       status: status ?? this.status,
       completedAt: completedAt != null ? completedAt() : this.completedAt,
       startedAt: startedAt != null ? startedAt() : this.startedAt,
       actualDurationMinutes: actualDurationMinutes != null
           ? actualDurationMinutes()
           : this.actualDurationMinutes,
+      pausedRuns: pausedRuns ?? this.pausedRuns,
       date: date ?? this.date,
-      carriedFromDate:
-          carriedFromDate != null ? carriedFromDate() : this.carriedFromDate,
+      carriedFromDate: carriedFromDate != null
+          ? carriedFromDate()
+          : this.carriedFromDate,
+      doNextAt: doNextAt != null ? doNextAt() : this.doNextAt,
+      recurringId: recurringId != null ? recurringId() : this.recurringId,
     );
   }
 
@@ -144,8 +176,19 @@ class Task {
   /// Returns `null` if [startTime] is `null`.
   TimeOfDay? get endTime {
     if (startTime == null) return null;
-    final totalMinutes = startTime!.hour * 60 + startTime!.minute + durationMinutes;
+    final totalMinutes =
+        startTime!.hour * 60 + startTime!.minute + durationMinutes;
     return TimeOfDay(hour: totalMinutes ~/ 60, minute: totalMinutes % 60);
+  }
+
+  /// Minutes tracked as of [at]: earlier, paused runs (kept in
+  /// [actualDurationMinutes] while not complete) plus the current run. On
+  /// a completed task, the total recorded at completion.
+  int trackedMinutes(DateTime at) {
+    final earlier = actualDurationMinutes ?? 0;
+    if (status != TaskStatus.inProgress || startedAt == null) return earlier;
+    final current = at.difference(startedAt!).inMinutes;
+    return earlier + (current < 0 ? 0 : current);
   }
 
   /// Returns `true` if this task is [TaskStatus.inProgress] and the
@@ -177,13 +220,20 @@ class Task {
       'startTime': startTime == null
           ? null
           : {'hour': startTime!.hour, 'minute': startTime!.minute},
-      'priority': priority.name,
+      'isOutcome': isOutcome,
+      'isInterruption': isInterruption,
       'status': status.name,
       'completedAt': completedAt?.toIso8601String(),
       'startedAt': startedAt?.toIso8601String(),
       'actualDurationMinutes': actualDurationMinutes,
+      'pausedRuns': [
+        for (final r in pausedRuns)
+          {'start': r.start.toIso8601String(), 'end': r.end.toIso8601String()},
+      ],
       'date': date.toIso8601String(),
       'carriedFromDate': carriedFromDate?.toIso8601String(),
+      'doNextAt': doNextAt?.toIso8601String(),
+      'recurringId': recurringId,
     };
   }
 
@@ -194,9 +244,7 @@ class Task {
       final id = json['id'] as String;
       final title = json['title'] as String;
       final durationMinutes = json['durationMinutes'] as int;
-      final type = TaskType.values.firstWhere(
-        (e) => e.name == json['type'],
-      );
+      final type = TaskType.values.firstWhere((e) => e.name == json['type']);
       final startTimeMap = json['startTime'] as Map<String, dynamic>?;
       final startTime = startTimeMap == null
           ? null
@@ -204,9 +252,8 @@ class Task {
               hour: startTimeMap['hour'] as int,
               minute: startTimeMap['minute'] as int,
             );
-      final priority = Priority.values.firstWhere(
-        (e) => e.name == json['priority'],
-      );
+      final isOutcome = json['isOutcome'] as bool? ?? false;
+      final isInterruption = json['isInterruption'] as bool? ?? false;
       final status = TaskStatus.values.firstWhere(
         (e) => e.name == json['status'],
       );
@@ -217,10 +264,23 @@ class Task {
           ? null
           : DateTime.parse(json['startedAt'] as String);
       final actualDurationMinutes = json['actualDurationMinutes'] as int?;
+      final pausedRuns = [
+        for (final r in json['pausedRuns'] as List<dynamic>? ?? const [])
+          DateTimeRange(
+            start: DateTime.parse(
+              (r as Map<String, dynamic>)['start'] as String,
+            ),
+            end: DateTime.parse(r['end'] as String),
+          ),
+      ];
       final date = DateTime.parse(json['date'] as String);
       final carriedFromDate = json['carriedFromDate'] == null
           ? null
           : DateTime.parse(json['carriedFromDate'] as String);
+      final doNextAt = json['doNextAt'] == null
+          ? null
+          : DateTime.parse(json['doNextAt'] as String);
+      final recurringId = json['recurringId'] as String?;
 
       return Task(
         id: id,
@@ -228,13 +288,17 @@ class Task {
         durationMinutes: durationMinutes,
         type: type,
         startTime: startTime,
-        priority: priority,
+        isOutcome: isOutcome,
+        isInterruption: isInterruption,
         status: status,
         completedAt: completedAt,
         startedAt: startedAt,
         actualDurationMinutes: actualDurationMinutes,
+        pausedRuns: pausedRuns,
         date: date,
         carriedFromDate: carriedFromDate,
+        doNextAt: doNextAt,
+        recurringId: recurringId,
       );
     } catch (_) {
       return null;

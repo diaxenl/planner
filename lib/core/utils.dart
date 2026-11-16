@@ -1,25 +1,37 @@
-import 'constants.dart';
-
 /// Pure utility functions shared across the app.
 ///
 /// No Flutter imports — these are plain Dart helpers.
 class AppUtils {
   AppUtils._();
 
-  /// Converts a time (hour + optional minutes) to a vertical pixel offset
-  /// relative to the top of the timeline.
-  static double timeToOffset(int hour, [int minutes = 0]) {
-    final hoursFromStart = hour - AppConstants.dayStartHour;
-    return (hoursFromStart * AppConstants.hourHeight) +
-        (minutes / 60.0 * AppConstants.hourHeight);
+  /// Formats minutes-from-midnight as a 12-hour clock, e.g. "9:30 AM".
+  static String formatClock(int minutesFromMidnight) {
+    final h = (minutesFromMidnight ~/ 60) % 24;
+    final m = minutesFromMidnight % 60;
+    final suffix = h < 12 ? 'AM' : 'PM';
+    final h12 = h % 12 == 0 ? 12 : h % 12;
+    return '$h12:${m.toString().padLeft(2, '0')} $suffix';
   }
 
-  /// Formats an hour integer (0–23) as a 12-hour label, e.g. "6 AM", "1 PM".
-  static String formatHourLabel(int hour) {
-    if (hour == 0) return '12 AM';
-    if (hour < 12) return '$hour AM';
-    if (hour == 12) return '12 PM';
-    return '${hour - 12} PM';
+  /// Formats a duration in minutes compactly, e.g. "45m", "1h", "1h 30m".
+  static String formatDuration(int minutes) {
+    final h = minutes ~/ 60;
+    final m = minutes % 60;
+    if (h == 0) return '${m}m';
+    if (m == 0) return '${h}h';
+    return '${h}h ${m}m';
+  }
+
+  /// Formats a timer or countdown with units, so it can't be read as a
+  /// clock time: "45s", "14m 05s", "1h 12m".
+  static String formatTimer(Duration d) {
+    final total = d.inSeconds.abs();
+    final h = total ~/ 3600;
+    final m = (total % 3600) ~/ 60;
+    final s = total % 60;
+    if (h > 0) return '${h}h ${m.toString().padLeft(2, '0')}m';
+    if (m > 0) return '${m}m ${s.toString().padLeft(2, '0')}s';
+    return '${s}s';
   }
 
   /// Returns the full weekday name for [DateTime.weekday] (1 = Monday).
@@ -36,12 +48,64 @@ class AppUtils {
     return names[weekday - 1];
   }
 
-  /// Returns a 3-letter month abbreviation for [DateTime.month] (1 = Jan).
-  static String monthAbbrev(int month) {
+  /// Returns the full month name for [DateTime.month] (1 = January).
+  static String monthName(int month) {
     const names = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
     ];
     return names[month - 1];
+  }
+
+  /// A friendly label for [date] relative to [today]: "Today",
+  /// "Tomorrow", "Yesterday", or the weekday name.
+  static String relativeDayLabel(DateTime date, DateTime today) {
+    final d = DateTime(date.year, date.month, date.day);
+    final t = DateTime(today.year, today.month, today.day);
+    final diff = d.difference(t).inDays;
+    if (diff == 0) return 'Today';
+    if (diff == 1) return 'Tomorrow';
+    if (diff == -1) return 'Yesterday';
+    return weekdayName(d.weekday);
+  }
+
+  /// The next weekday (Monday–Friday) after [date]: Friday → Monday.
+  static DateTime nextWorkday(DateTime date) {
+    var d = DateTime(date.year, date.month, date.day + 1);
+    while (d.weekday == DateTime.saturday || d.weekday == DateTime.sunday) {
+      d = DateTime(d.year, d.month, d.day + 1);
+    }
+    return d;
+  }
+
+  /// [relativeDayLabel] for dates within a week either side of [today];
+  /// further out, "Tue, Nov 24".
+  static String friendlyDate(DateTime date, DateTime today) {
+    final d = DateTime(date.year, date.month, date.day);
+    final t = DateTime(today.year, today.month, today.day);
+    final diff = d.difference(t).inDays;
+    if (diff.abs() < 7) return relativeDayLabel(d, t);
+    return '${weekdayName(d.weekday).substring(0, 3)}, '
+        '${monthName(d.month).substring(0, 3)} ${d.day}';
+  }
+
+  /// [friendlyDate] for use mid-sentence: "tomorrow", "Monday",
+  /// "Tue, Nov 24".
+  static String dayPhrase(DateTime date, DateTime today) {
+    final label = friendlyDate(date, today);
+    return switch (label) {
+      'Today' || 'Tomorrow' || 'Yesterday' => label.toLowerCase(),
+      _ => label,
+    };
   }
 }
