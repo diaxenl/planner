@@ -47,6 +47,9 @@ class FakeCalendar implements CalendarSource {
 
   @override
   Future<bool> requestAccess() async => true;
+
+  @override
+  Future<bool> hasAccess() async => true;
   @override
   Future<List<DeviceCalendarInfo>> listCalendars() async => const [
     DeviceCalendarInfo(id: 'work', name: 'Work', accountName: 'me@company.com'),

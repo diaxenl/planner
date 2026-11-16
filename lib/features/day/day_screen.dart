@@ -132,10 +132,10 @@ class _DayScreenState extends State<DayScreen> {
                           onSubmit: (raw) =>
                               _capture(model, raw, asOutcome: true),
                         ),
-                        if (model.schedule.committed.isNotEmpty) ...[
-                          const SizedBox(height: 28),
-                          _agenda(model, current),
-                        ],
+                        // The day's hours, even when empty: free time
+                        // to plan into, and meetings once connected.
+                        const SizedBox(height: 28),
+                        _agenda(model, current),
                       ] else
                         ..._daySections(
                           model,

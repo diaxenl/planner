@@ -73,22 +73,16 @@ class AgendaList extends StatelessWidget {
       children: [
         Text('SCHEDULE', style: text.labelSmall),
         const SizedBox(height: 8),
-        if (entries.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: Text('Nothing scheduled.', style: text.bodyMedium),
-          ),
-        if (entries.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          ScheduleTimeline(
-            entries: entries,
-            current: current,
-            dayStartHour: dayStartHour,
-            dayEndHour: dayEndHour,
-            isToday: isToday,
-            onTap: onTap,
-          ),
-        ],
+        // Drawn even when empty: the workday's hours and the now line.
+        const SizedBox(height: 8),
+        ScheduleTimeline(
+          entries: entries,
+          current: current,
+          dayStartHour: dayStartHour,
+          dayEndHour: dayEndHour,
+          isToday: isToday,
+          onTap: onTap,
+        ),
         if (schedule.overflow.isNotEmpty) ...[
           const SizedBox(height: 24),
           Text("DOESN'T FIT", style: text.labelSmall),
