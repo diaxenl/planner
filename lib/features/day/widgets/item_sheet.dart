@@ -50,6 +50,9 @@ class ItemSheet extends StatefulWidget {
     ValueChanged<Task>? onDeleted,
     void Function(ItemAction action, Task task)? onAction,
   }) {
+    // Otherwise the add field takes focus back (and the keyboard pops
+    // up) when the sheet closes.
+    FocusManager.instance.primaryFocus?.unfocus();
     return showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -69,7 +72,7 @@ class ItemSheet extends StatefulWidget {
 }
 
 /// Status actions offered on an existing item.
-enum ItemAction { start, done, cancel, tomorrow, pickDay, doNext }
+enum ItemAction { start, pause, done, cancel, tomorrow, pickDay, doNext }
 
 class _ItemSheetState extends State<ItemSheet> {
   static const _durationPresets = [15, 30, 45, 60, 90, 120, 180, 240];
@@ -149,12 +152,29 @@ class _ItemSheetState extends State<ItemSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              existing == null ? 'New item' : 'Edit item',
-              style: text.titleLarge,
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    existing == null ? 'New item' : 'Item',
+                    style: text.titleLarge,
+                  ),
+                ),
+                // Up top, so it's never below the fold.
+                if (_isEdit)
+                  IconButton(
+                    tooltip: 'Delete',
+                    onPressed: _delete,
+                    icon: Icon(Icons.delete_outline, color: colors.textMuted),
+                  ),
+              ],
             ),
-            if (existing != null) _actions(context, existing),
-            const SizedBox(height: 16),
+            if (existing != null) ...[
+              _actions(context, existing),
+              const SizedBox(height: 20),
+              _label(context, 'DETAILS'),
+            ],
+            const SizedBox(height: 8),
             TextField(
               controller: _title,
               autofocus: !_isEdit && (widget.draft?.title.isEmpty ?? true),
@@ -182,6 +202,7 @@ class _ItemSheetState extends State<ItemSheet> {
               onSelectionChanged: (s) {
                 setState(() {
                   _type = s.first;
+                  _error = null;
                   if (_type == TaskType.floating) _startTime = null;
                 });
                 if (_type != TaskType.floating && _startTime == null) {
@@ -276,15 +297,14 @@ class _ItemSheetState extends State<ItemSheet> {
               onPressed: _save,
               child: Text(_isEdit ? 'Save' : 'Add'),
             ),
-            if (_isEdit)
-              TextButton(onPressed: _delete, child: const Text('Delete')),
           ],
         ),
       ),
     );
   }
 
-  /// Start / Done / Won't do / Tomorrow, as allowed by the item's status.
+  /// Start / Done / Pause / Won't do / Tomorrow, as allowed by the item's
+  /// status.
   Widget _actions(BuildContext context, Task task) {
     final notStarted = task.status == TaskStatus.notStarted;
     final inProgress = task.status == TaskStatus.inProgress;
@@ -309,17 +329,33 @@ class _ItemSheetState extends State<ItemSheet> {
         !task.isOutcome &&
         task.doNextAt == null;
 
-    Widget action(String label, ItemAction a) => OutlinedButton(
-      style: OutlinedButton.styleFrom(
-        minimumSize: const Size(0, 40),
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-      ),
-      onPressed: () {
+    Widget action(String label, ItemAction a) {
+      void onPressed() {
         Navigator.of(context).pop(true);
         widget.onAction?.call(a, task);
-      },
-      child: Text(label),
-    );
+      }
+
+      const padding = EdgeInsets.symmetric(horizontal: 14);
+      // Start is the main thing to do with an item: make it stand out.
+      if (a == ItemAction.start) {
+        return FilledButton(
+          style: FilledButton.styleFrom(
+            minimumSize: const Size(0, 40),
+            padding: padding,
+          ),
+          onPressed: onPressed,
+          child: Text(label),
+        );
+      }
+      return OutlinedButton(
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size(0, 40),
+          padding: padding,
+        ),
+        onPressed: onPressed,
+        child: Text(label),
+      );
+    }
 
     return Padding(
       padding: const EdgeInsets.only(top: 12),
@@ -329,8 +365,9 @@ class _ItemSheetState extends State<ItemSheet> {
         children: [
           if (notStarted && !isMeeting) action('Start', ItemAction.start),
           if (!isMeeting) action('Done', ItemAction.done),
+          if (inProgress) action('Pause', ItemAction.pause),
           action("Won't do", ItemAction.cancel),
-          if (canDoNext) action('Do next', ItemAction.doNext),
+          if (canDoNext) action('Do this next', ItemAction.doNext),
           if (notStarted) action(nextDay, ItemAction.tomorrow),
           if (notStarted) action('Pick a day…', ItemAction.pickDay),
         ],
@@ -347,7 +384,10 @@ class _ItemSheetState extends State<ItemSheet> {
         _Choice(
           label: AppUtils.formatDuration(m),
           selected: _duration == m,
-          onTap: () => setState(() => _duration = m),
+          onTap: () => setState(() {
+            _duration = m;
+            _error = null;
+          }),
         ),
       _Choice(
         label: _durationPresets.contains(_duration)
@@ -494,7 +534,10 @@ class _ItemSheetState extends State<ItemSheet> {
       ),
     );
     if (!mounted || minutes == null) return;
-    setState(() => _duration = minutes);
+    setState(() {
+      _duration = minutes;
+      _error = null;
+    });
   }
 
   Future<void> _pickTime() async {
@@ -505,7 +548,13 @@ class _ItemSheetState extends State<ItemSheet> {
           _startTime ?? TimeOfDay(hour: (now.hour + 1).clamp(0, 23), minute: 0),
     );
     if (!mounted) return;
-    if (picked != null) setState(() => _startTime = picked);
+    // A fresh time clears an error about the old one (e.g. an overlap).
+    if (picked != null) {
+      setState(() {
+        _startTime = picked;
+        _error = null;
+      });
+    }
   }
 
   void _save() {

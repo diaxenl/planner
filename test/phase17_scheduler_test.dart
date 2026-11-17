@@ -36,12 +36,8 @@ List<Task> _meetings() => [
   _meeting('Kids pickup', 17, 30, 30),
 ];
 
-DaySchedule _run(List<Task> tasks, {int? now}) => Scheduler.schedule(
-  tasks,
-  dayStartHour: 8,
-  dayEndHour: 18,
-  nowMinutes: now,
-);
+DaySchedule _run(List<Task> tasks, {int? now}) =>
+    Scheduler.schedule(tasks, dayStartHour: 8, dayEndHour: 18, nowMinutes: now);
 
 List<ScheduledTask> _sessions(DaySchedule s, Task t) =>
     s.committed.where((st) => st.task.id == t.id).toList();
@@ -75,11 +71,13 @@ void main() {
       expect(_sessions(s, o).single.startMinutes, 10 * 60);
     });
 
-    test('other work is never split', () {
+    test('other work is split too, to use free time', () {
       final chore = _work('Big chore', 120);
       final s = _run([..._meetings(), chore]);
-      expect(s.overflow, contains(chore));
-      expect(_sessions(s, chore), isEmpty);
+      expect(s.overflow, isNot(contains(chore)));
+      final parts = _sessions(s, chore);
+      expect(parts.length, greaterThan(1));
+      expect(parts.fold<int>(0, (m, p) => m + p.durationMinutes), 120);
     });
 
     test('no session is shorter than 30 minutes', () {

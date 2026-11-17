@@ -10,7 +10,7 @@ import '../../../models/task.dart';
 /// The one thing to focus on right now, with a live timer.
 ///
 /// - In progress: elapsed time; turns accent and shows "+Xm over" once
-///   the estimate is exceeded. Actions: Done, Cancel.
+///   the estimate is exceeded. Actions: Done, Pause, Won't do.
 /// - Not started: counts down to its start (or shows its window if it
 ///   should already be under way). Actions: Start, Done, Cancel.
 /// - Meetings: shows time remaining / until start; no actions. If a task
@@ -63,6 +63,8 @@ class NowCard extends StatefulWidget {
 }
 
 class _NowCardState extends State<NowCard> {
+  static const _tight = EdgeInsets.symmetric(horizontal: 8);
+
   late final Timer _ticker;
 
   @override
@@ -210,11 +212,8 @@ class _NowCardState extends State<NowCard> {
                 elapsedOver > 0 &&
                 widget.startingSoon == null) ...[
               const SizedBox(height: 12),
-              _Warning(
-                text: 'Past your estimate — still on it?',
-                actionLabel: 'Pause',
-                onAction: widget.onPauseCurrent,
-              ),
+              // Pause sits with Done below.
+              const _Warning(text: 'Past your estimate — still on it?'),
             ],
             if (widget.startingSoon != null && inProgress) ...[
               const SizedBox(height: 12),
@@ -250,13 +249,25 @@ class _NowCardState extends State<NowCard> {
                         child: const Text('Done'),
                       ),
                     ),
-                  ] else
+                  ] else ...[
+                    // Three actions share the row: less padding, so
+                    // each label stays on one line.
                     Expanded(
                       child: FilledButton(
+                        style: FilledButton.styleFrom(padding: _tight),
                         onPressed: widget.onDone,
-                        child: const Text('Done'),
+                        child: const Text('Done', maxLines: 1),
                       ),
                     ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(padding: _tight),
+                        onPressed: widget.onPauseCurrent,
+                        child: const Text('Pause', maxLines: 1),
+                      ),
+                    ),
+                  ],
                   const SizedBox(width: 4),
                   TextButton(
                     onPressed: widget.onCancel,

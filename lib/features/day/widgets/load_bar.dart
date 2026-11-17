@@ -82,7 +82,7 @@ class LoadBar extends StatelessWidget {
             if (load.outcomes > 0)
               _legend(context, colors.accent, 'Outcomes', load.outcomes),
             if (load.other > 0)
-              _legend(context, colors.other, 'Other', load.other),
+              _legend(context, colors.other, 'Other tasks', load.other),
           ],
         ),
       ],

@@ -32,9 +32,13 @@ class AppConstants {
   /// How often to re-check for task overruns while a task is in progress.
   static const Duration overrunCheckInterval = Duration(seconds: 30);
 
-  /// Shortest session an Outcome is split into when it doesn't fit one
+  /// Shortest session Anytime work is split into when it doesn't fit one
   /// free gap.
   static const int minSessionMinutes = 30;
+
+  /// A set-time item not started this many minutes after its start time
+  /// is listed as missed.
+  static const int missedAfterMinutes = 10;
 
   /// How long before a meeting the Now card warns that the running task
   /// is about to run into it.

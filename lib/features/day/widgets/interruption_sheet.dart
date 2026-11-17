@@ -16,12 +16,17 @@ class InterruptionSheet extends StatefulWidget {
   static Future<(String, InterruptionChoice)?> show(
     BuildContext context, {
     String laterLabel = 'Tomorrow',
-  }) => showModalBottomSheet<(String, InterruptionChoice)>(
-    context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    builder: (_) => InterruptionSheet(laterLabel: laterLabel),
-  );
+  }) {
+    // Otherwise the add field takes focus back (and the keyboard pops
+    // up) when the sheet closes.
+    FocusManager.instance.primaryFocus?.unfocus();
+    return showModalBottomSheet<(String, InterruptionChoice)>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => InterruptionSheet(laterLabel: laterLabel),
+    );
+  }
 
   @override
   State<InterruptionSheet> createState() => _InterruptionSheetState();

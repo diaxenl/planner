@@ -4,8 +4,8 @@ import '../../../core/theme.dart';
 
 /// Composer-style capture field pinned to the bottom of the Day screen.
 /// Submitting hands the raw text to [onSubmit] and clears the field.
-/// When [onSomethingCameUp] is set (today only), a bolt button opens the
-/// interruption flow. While the field is focused, shorthand chips sit
+/// When [onSomethingCameUp] is set (today only), a "Came up" button opens
+/// the interruption flow. While the field is focused, shorthand chips sit
 /// above it; tapping one appends its token, so the shorthand never has
 /// to be learned up front.
 class CaptureBar extends StatefulWidget {
@@ -30,6 +30,7 @@ class _CaptureBarState extends State<CaptureBar> {
     ('1h', '1h'),
     ('at …', _pickTime),
     ('tomorrow', 'tomorrow'),
+    ('! High', '!'),
   ];
 
   @override
@@ -134,10 +135,19 @@ class _CaptureBarState extends State<CaptureBar> {
           Row(
             children: [
               if (widget.onSomethingCameUp != null)
-                IconButton(
-                  tooltip: 'Something came up',
-                  onPressed: widget.onSomethingCameUp,
-                  icon: Icon(Icons.bolt, color: colors.accent),
+                // Labelled: an icon alone didn't say what it does.
+                Tooltip(
+                  message: 'Something came up',
+                  child: TextButton.icon(
+                    style: TextButton.styleFrom(
+                      foregroundColor: colors.accent,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    onPressed: widget.onSomethingCameUp,
+                    icon: const Icon(Icons.bolt, size: 18),
+                    label: const Text('Came up'),
+                  ),
                 )
               else
                 const SizedBox(width: 48),
@@ -149,7 +159,7 @@ class _CaptureBarState extends State<CaptureBar> {
                   textCapitalization: TextCapitalization.sentences,
                   onSubmitted: (_) => _submit(),
                   decoration: InputDecoration(
-                    hintText: 'Add… e.g. "Prep board deck 1h *"',
+                    hintText: 'Add… e.g. "Call Sam 20m at 3"',
                     fillColor: colors.surface,
                     isDense: true,
                   ),

@@ -12,19 +12,37 @@ import 'package:planner/state/day_planner_model.dart';
 /// day window.
 final _tooLateForFloatingTests = TimeOfDay.now().hour >= 20;
 
-Task _floating(String title,
-        {int minutes = 30, bool outcome = false}) =>
-    Task(
-      title: title,
-      durationMinutes: minutes,
-      type: TaskType.floating,
-      isOutcome: outcome,
-      date: DateTime.now(),
-    );
+int _nowMinutes() {
+  final now = TimeOfDay.now();
+  return now.hour * 60 + now.minute;
+}
 
-int _startOf(DayPlannerModel m, Task t) => m.schedule.committed
-    .firstWhere((st) => st.task.id == t.id)
-    .startMinutes;
+/// Fills [m]'s day from [from] to 11 PM with floating work (chunks of at
+/// most 8 hours), leaving less than 5 minutes free.
+List<Task> _fillRestOfDay(DayPlannerModel m, {required int from}) {
+  final left = 23 * 60 - from;
+  var remaining = left - left % 5;
+  final added = <Task>[];
+  while (remaining >= 5) {
+    final chunk = remaining > 480 ? 480 : remaining;
+    final t = _floating('Filler', minutes: chunk);
+    m.addTask(t);
+    added.add(t);
+    remaining -= chunk;
+  }
+  return added;
+}
+
+Task _floating(String title, {int minutes = 30, bool outcome = false}) => Task(
+  title: title,
+  durationMinutes: minutes,
+  type: TaskType.floating,
+  isOutcome: outcome,
+  date: DateTime.now(),
+);
+
+int _startOf(DayPlannerModel m, Task t) =>
+    m.schedule.committed.firstWhere((st) => st.task.id == t.id).startMinutes;
 
 Task _get(DayPlannerModel m, Task t) => m.tasks.firstWhere((x) => x.id == t.id);
 
@@ -130,8 +148,7 @@ void main() {
       expect(_get(model, t).status, TaskStatus.complete);
     });
 
-    test('markComplete on a never-started task counts its estimate',
-        () {
+    test('markComplete on a never-started task counts its estimate', () {
       final t = _floating('A');
       final at = DateTime.now();
       model
@@ -167,13 +184,13 @@ void main() {
       expect(model.suggestion, isNull);
     }, skip: _tooLateForFloatingTests);
 
-    test('pushing an Outcome later surfaces a suggestion', () {
+    test('your own change pushing an Outcome later is silent '
+        '(the timeline shows it)', () {
       final low = _floating('Low', minutes: 60, outcome: true);
       model.addTask(low);
       model.addTask(_meetingOn(model, low));
 
-      expect(model.suggestion, isNotNull);
-      expect(model.suggestion!.moves.map((m) => m.task.id), [low.id]);
+      expect(model.suggestion, isNull);
     }, skip: _tooLateForFloatingTests);
 
     test('reshuffling non-outcome work is silent', () {
@@ -214,45 +231,46 @@ void main() {
     }, skip: _tooLateForFloatingTests);
 
     test('Dismiss keeps displaced tasks at their previous positions', () {
-      final first = _floating('First', minutes: 30, outcome: true);
-      final low = _floating('Low', minutes: 60, outcome: true);
-      model
-        ..addTask(first)
-        ..addTask(low);
-      final before = _startOf(model, low);
+      final fillers = _fillRestOfDay(model, from: _nowMinutes());
+      final before = _startOf(model, fillers.first);
 
-      // Lengthening the first Outcome pushes the second one later.
-      model.updateTask(first.id, first.copyWith(durationMinutes: 90));
-      expect(model.suggestion, isNotNull);
+      // An urgent Outcome goes first and pushes work out of the day.
+      model.addTask(_floating('Urgent', minutes: 15, outcome: true));
+      expect(model.suggestion?.pushedOut, isNotEmpty);
 
       model.dismissSuggestion();
-      expect(_startOf(model, low), before,
-          reason: 'Dismiss should discard the proposed move');
-    }, skip: _tooLateForFloatingTests);
+      expect(model.suggestion, isNull);
+      expect(
+        _startOf(model, fillers.first),
+        before,
+        reason: 'Dismiss should discard the proposed move',
+      );
+    }, skip: TimeOfDay.now().hour >= 15 || TimeOfDay.now().hour < 6);
   });
 
   group('Phase 9 — overrun monitor', () {
-    testWidgets('periodic check does not wipe a pending suggestion',
-        (tester) async {
+    testWidgets('periodic check does not wipe a pending suggestion', (
+      tester,
+    ) async {
       final model = DayPlannerModel()..setWorkday(6, 23);
       final active = _floating('Active');
-      final first = _floating('First', minutes: 30, outcome: true);
-      final low = _floating('Low', minutes: 60, outcome: true);
       model
         ..addTask(active)
-        ..startTask(active.id)
-        ..addTask(first)
-        ..addTask(low)
-        ..updateTask(first.id, first.copyWith(durationMinutes: 90));
+        ..startTask(active.id);
+      _fillRestOfDay(model, from: _nowMinutes() + 30);
+      model.addTask(_floating('Urgent', minutes: 15, outcome: true));
       expect(model.suggestion, isNotNull);
 
       await tester.pump(const Duration(seconds: 31));
       final survived = model.suggestion != null;
       model.dispose();
 
-      expect(survived, isTrue,
-          reason: 'User has not accepted/dismissed the banner yet');
-    }, skip: _tooLateForFloatingTests);
+      expect(
+        survived,
+        isTrue,
+        reason: 'User has not accepted/dismissed the banner yet',
+      );
+    }, skip: TimeOfDay.now().hour >= 15 || TimeOfDay.now().hour < 6);
   });
 
   group('Phase 8 — persistence of new fields', () {
@@ -283,20 +301,23 @@ void main() {
       for (var i = 0; i < 3; i++) {
         model.addTask(_floating('O$i', outcome: true));
       }
-      expect(() => model.addTask(_floating('O3', outcome: true)),
-          throwsArgumentError);
+      expect(
+        () => model.addTask(_floating('O3', outcome: true)),
+        throwsArgumentError,
+      );
       expect(model.tasks.length, 3);
     });
 
     test('the cap is configurable', () {
       model.outcomeCap = 1;
       model.addTask(_floating('O0', outcome: true));
-      expect(() => model.addTask(_floating('O1', outcome: true)),
-          throwsArgumentError);
+      expect(
+        () => model.addTask(_floating('O1', outcome: true)),
+        throwsArgumentError,
+      );
     });
 
-    test('cancelled outcomes free a slot; editing one does not self-count',
-        () {
+    test('cancelled outcomes free a slot; editing one does not self-count', () {
       model.outcomeCap = 1;
       final first = _floating('O0', outcome: true);
       model.addTask(first);
@@ -337,15 +358,15 @@ void main() {
     tearDown(() => model.dispose());
 
     Task task(String title, {bool outcome = false}) => Task(
-          title: title,
-          durationMinutes: 30,
-          type: TaskType.pinned,
-          startTime: const TimeOfDay(hour: 22, minute: 0),
-          isOutcome: outcome,
-          date: today,
-        );
+      title: title,
+      durationMinutes: 30,
+      type: TaskType.pinned,
+      startTime: const TimeOfDay(hour: 22, minute: 0),
+      isOutcome: outcome,
+      date: today,
+    );
 
-    test('moves to the target day, reset and unpinned', () async {
+    test('moves to the target day, reset, keeping its set time', () async {
       final t = task('A');
       model.addTask(t);
       model.startTask(t.id);
@@ -359,9 +380,26 @@ void main() {
       expect(moved.carriedFromDate, today);
       expect(moved.status, TaskStatus.notStarted);
       expect(moved.startedAt, isNull);
-      expect(moved.type, TaskType.floating);
-      expect(moved.startTime, isNull);
+      expect(moved.type, TaskType.pinned);
+      expect(moved.startTime, const TimeOfDay(hour: 22, minute: 0));
     });
+
+    test(
+      'a set time already taken on the target day becomes Anytime',
+      () async {
+        final first = task('A');
+        model.addTask(first);
+        await model.moveToDate(first.id, tomorrow);
+        final second = task('B');
+        model.addTask(second);
+        await model.moveToDate(second.id, tomorrow);
+        final b = (await repo.load(
+          tomorrow,
+        )).firstWhere((t) => t.id == second.id);
+        expect(b.type, TaskType.floating);
+        expect(b.startTime, isNull);
+      },
+    );
 
     test('keeps Outcome unless the target day is full', () async {
       model.outcomeCap = 1;
@@ -373,13 +411,13 @@ void main() {
       final b = task('B', outcome: true);
       model.addTask(b);
       await model.moveToDate(b.id, tomorrow);
-      final bMoved =
-          (await repo.load(tomorrow)).firstWhere((t) => t.id == b.id);
+      final bMoved = (await repo.load(
+        tomorrow,
+      )).firstWhere((t) => t.id == b.id);
       expect(bMoved.isOutcome, isFalse);
     });
 
-    test('a future day is planned from the start of the day window',
-        () async {
+    test('a future day is planned from the start of the day window', () async {
       final future = DateTime.now().add(const Duration(days: 2));
       await model.setViewedDate(future);
       final t = Task(
@@ -427,11 +465,15 @@ void main() {
 
     test('a Meeting may not overlap a Set-time item, and vice versa', () {
       model.addTask(fixed('Pinned', TaskType.pinned, 10));
-      expect(() => model.addTask(fixed('Meeting', TaskType.hard, 10)),
-          throwsArgumentError);
+      expect(
+        () => model.addTask(fixed('Meeting', TaskType.hard, 10)),
+        throwsArgumentError,
+      );
       model.addTask(fixed('Meeting', TaskType.hard, 12));
-      expect(() => model.addTask(fixed('Pinned 2', TaskType.pinned, 12)),
-          throwsArgumentError);
+      expect(
+        () => model.addTask(fixed('Pinned 2', TaskType.pinned, 12)),
+        throwsArgumentError,
+      );
     });
 
     test('finished fixed items free their slot', () {
@@ -452,8 +494,10 @@ void main() {
       expect(model.tasks.first.title, 'Renamed');
       final plain = _floating('Plain');
       model.addTask(plain);
-      expect(() => model.updateTask(plain.id, plain.copyWith(isOutcome: true)),
-          throwsArgumentError);
+      expect(
+        () => model.updateTask(plain.id, plain.copyWith(isOutcome: true)),
+        throwsArgumentError,
+      );
     });
   });
 
@@ -462,71 +506,79 @@ void main() {
     DateTime at(int h, [int m = 0]) =>
         DateTime(day.year, day.month, day.day, h, m);
 
-    test('timed events become read-only Meetings; all-day are labels',
-        () async {
-      final source = _FakeCalendar([
-        CalendarEvent(
+    test(
+      'timed events become read-only Meetings; all-day are labels',
+      () async {
+        final source = _FakeCalendar([
+          CalendarEvent(
             id: 'e1',
             calendarId: 'work',
             title: 'Board prep',
             start: at(14),
-            end: at(15)),
-        CalendarEvent(
+            end: at(15),
+          ),
+          CalendarEvent(
             id: 'e2',
             calendarId: 'work',
             title: 'Offsite',
             start: at(0),
             end: at(23, 59),
-            isAllDay: true),
-      ]);
-      final model = DayPlannerModel(calendarSource: source);
-      await model.loadDate(day);
+            isAllDay: true,
+          ),
+        ]);
+        final model = DayPlannerModel(calendarSource: source);
+        await model.loadDate(day);
 
-      final meeting = model.schedule.committed.single.task;
-      expect(meeting.title, 'Board prep');
-      expect(meeting.type, TaskType.hard);
-      expect(meeting.durationMinutes, 60);
-      expect(model.isImported(meeting), isTrue);
-      expect(model.tasks, isEmpty, reason: 'imported events are not tasks');
-      expect(model.allDayEvents.single.title, 'Offsite');
-      model.dispose();
-    });
+        final meeting = model.schedule.committed.single.task;
+        expect(meeting.title, 'Board prep');
+        expect(meeting.type, TaskType.hard);
+        expect(meeting.durationMinutes, 60);
+        expect(model.isImported(meeting), isTrue);
+        expect(model.tasks, isEmpty, reason: 'imported events are not tasks');
+        expect(model.allDayEvents.single.title, 'Offsite');
+        model.dispose();
+      },
+    );
 
-    test('imported meetings block overlapping fixed items', () async {
+    test('imported meetings do not block overlapping fixed items', () async {
       final model = DayPlannerModel(
         calendarSource: _FakeCalendar([
           CalendarEvent(
-              id: 'e1',
-              calendarId: 'c',
-              title: 'Sync',
-              start: at(9),
-              end: at(10)),
+            id: 'e1',
+            calendarId: 'c',
+            title: 'Sync',
+            start: at(9),
+            end: at(10),
+          ),
         ]),
       );
       await model.loadDate(day);
-      expect(
-        () => model.addTask(Task(
+      // You may be skipping the meeting; the timeline shows the overlap.
+      model.addTask(
+        Task(
           title: 'Call',
           durationMinutes: 30,
           type: TaskType.pinned,
           startTime: const TimeOfDay(hour: 9, minute: 30),
           date: day,
-        )),
-        throwsArgumentError,
+        ),
       );
+      expect(model.tasks.single.title, 'Call');
       model.dispose();
     });
 
-    test('calendar selection is passed to the source; failures are ignored',
-        () async {
-      final source = _FakeCalendar([], fail: true);
-      final model = DayPlannerModel(calendarSource: source)
-        ..calendarIds = {'work'};
-      await model.loadDate(day);
-      expect(source.lastIds, {'work'});
-      expect(model.schedule.committed, isEmpty);
-      model.dispose();
-    });
+    test(
+      'calendar selection is passed to the source; failures are ignored',
+      () async {
+        final source = _FakeCalendar([], fail: true);
+        final model = DayPlannerModel(calendarSource: source)
+          ..calendarIds = {'work'};
+        await model.loadDate(day);
+        expect(source.lastIds, {'work'});
+        expect(model.schedule.committed, isEmpty);
+        model.dispose();
+      },
+    );
   });
 
   group('Workday', () {

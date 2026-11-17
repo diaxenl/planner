@@ -98,7 +98,8 @@ class DayStats {
   /// next upcoming not-started item. `null` if nothing is left today.
   ///
   /// A meeting takes the card even while a task is running, so the task
-  /// can't hide it (see [runningItem]).
+  /// can't hide it (see [runningItem]). A set-time item doesn't: the
+  /// running task keeps the card, which warns about it instead.
   static ScheduledTask? currentItem(DaySchedule schedule, int nowMinutes) {
     final active = schedule.committed.where(
       (st) =>
@@ -110,6 +111,7 @@ class DayStats {
     if (running != null) {
       for (final st in active) {
         if (_isFixedNotStarted(st) &&
+            st.task.type == TaskType.hard &&
             st.startMinutes <= nowMinutes &&
             nowMinutes < st.endMinutes) {
           return st;
