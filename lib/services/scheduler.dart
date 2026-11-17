@@ -18,9 +18,10 @@ import '../models/task.dart';
 /// finished early frees the rest of its slot, and one marked "Won't do"
 /// frees all of it.
 ///
-/// An Outcome that doesn't fit any single gap is split into sessions of
-/// at least [AppConstants.minSessionMinutes], earliest gaps first. Other
-/// work is never split.
+/// Anytime work that doesn't fit any single gap is split into sessions of
+/// at least [AppConstants.minSessionMinutes], earliest gaps first, so free
+/// time gets used (an estimate is a guide: a 2h task can be four 30m
+/// sessions).
 class Scheduler {
   Scheduler._();
 
@@ -135,14 +136,12 @@ class Scheduler {
         if (b.blockEndMin > b.startMin) b,
     ];
 
-    // A running floating Outcome stops at the next fixed block (or now,
-    // if it has run into it); what's left is planned as later sessions.
+    // Running Anytime work stops at the next fixed block (or now, if it
+    // has run into it); what's left is planned as later sessions.
     final remainders = <_Work>[];
     for (final b in fixedBlocks) {
       final t = b.task;
-      if (t.status != TaskStatus.inProgress ||
-          !t.isOutcome ||
-          t.startTime != null) {
+      if (t.status != TaskStatus.inProgress || t.startTime != null) {
         continue;
       }
       final planned = b.startMin + t.remainingMinutes;
@@ -256,10 +255,8 @@ class Scheduler {
         continue;
       }
 
-      // An Outcome may be split across gaps, earliest first.
-      final plan = work.task.isOutcome
-          ? _split(gaps, work.minutes, usableStart, effectiveNow)
-          : null;
+      // Otherwise split across gaps, earliest first.
+      final plan = _split(gaps, work.minutes, usableStart, effectiveNow);
       if (plan == null) {
         if (!remainders.contains(work)) overflow.add(work.task);
         continue;

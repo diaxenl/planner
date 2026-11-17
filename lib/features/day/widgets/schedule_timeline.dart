@@ -484,6 +484,8 @@ class _Block extends StatelessWidget {
         ? Icon(Icons.check, size: 14, color: colors.textMuted)
         : Text(
             '${AppUtils.formatClock(entry.startMinutes)} · $detail',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: detailStyle,
           );
 
@@ -513,7 +515,9 @@ class _Block extends StatelessWidget {
         children: [
           Expanded(child: title),
           const SizedBox(width: 8),
-          trailing,
+          // In a narrow (side-by-side) block both shrink, so the title
+          // still shows.
+          isDone ? trailing : Flexible(child: trailing),
         ],
       );
     } else {

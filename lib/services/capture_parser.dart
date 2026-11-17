@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../models/task.dart';
+
 /// What [CaptureParser.parse] could read from a line of free text.
 /// Unparsed fields are `null` / `false`; callers apply defaults.
 class ParsedCapture {
@@ -9,6 +11,7 @@ class ParsedCapture {
     this.startTime,
     this.date,
     this.isOutcome = false,
+    this.priority,
   });
 
   final String title;
@@ -18,6 +21,9 @@ class ParsedCapture {
   /// The day named in the text ("today", "tomorrow", "Friday"), or `null`.
   final DateTime? date;
   final bool isOutcome;
+
+  /// `!` → High, `!low` → Low; `null` when not given.
+  final TaskPriority? priority;
 }
 
 /// Pure, stateless parser for capture-bar shorthand, e.g.
@@ -34,6 +40,13 @@ class ParsedCapture {
 /// - Day: `today`, `tomorrow`, or a weekday name (`Friday`, the next one,
 ///   today included), only right after `on` or in the closing run.
 /// - Outcome: `*` as its own word, or at the very start or end of the text.
+/// - Priority: `!` (High) or `!low` (Low), as their own words.
+///
+/// Plain words are read too: `2 hours`, `10 minutes`, `an hour`,
+/// `half an hour` (a filler right before them, such as "about",
+/// "probably" or "for", is dropped); `noon`; `after work` (the end of the
+/// workday). A time right after `by` / `before` / `until` / `due` is a
+/// deadline, which HyperDay doesn't plan around, so it stays in the title.
 /// The `at` / `on` before a time or day is dropped. Everything else, in
 /// order, is the title. Never validates ranges — that is the model's job.
 class CaptureParser {
@@ -87,17 +100,37 @@ class CaptureParser {
     }
     words.removeWhere((w) => w.isEmpty);
 
+    // ── Priority ────────────────────────────────────────────────────
+    TaskPriority? priority;
+    words.removeWhere((w) {
+      final l = w.toLowerCase();
+      if (l == '!' || l == '!high') {
+        priority = TaskPriority.high;
+        return true;
+      }
+      if (l == '!low') {
+        priority = TaskPriority.low;
+        return true;
+      }
+      return false;
+    });
+
+    _normalizePhrases(words, workdayEndHour);
+
     final lower = [for (final w in words) _bare(w.toLowerCase())];
     final day = today ?? DateTime.now();
 
     // A bare hour ("at 3") only counts in the closing run (see below), so
     // "Look at 3 options" stays a title.
-    TimeOfDay? timeAt(int i, {bool bare = true}) => _time(
-      lower[i],
-      allowBare: bare && i > 0 && _isAt(lower[i - 1]),
-      startHour: workdayStartHour,
-      endHour: workdayEndHour,
-    );
+    TimeOfDay? timeAt(int i, {bool bare = true}) {
+      if (i > 0 && _deadlineWords.contains(lower[i - 1])) return null;
+      return _time(
+        lower[i],
+        allowBare: bare && i > 0 && _isAt(lower[i - 1]),
+        startHour: workdayStartHour,
+        endHour: workdayEndHour,
+      );
+    }
 
     // ── The closing run of shorthand ────────────────────────────────
     var tailStart = words.length;
@@ -128,6 +161,10 @@ class CaptureParser {
         final d = _duration(w);
         if (d != null) {
           duration = d;
+          if (title.isNotEmpty &&
+              _fillers.contains(_bare(title.last.toLowerCase()))) {
+            title.removeLast();
+          }
           continue;
         }
       }
@@ -151,12 +188,84 @@ class CaptureParser {
     }
 
     return ParsedCapture(
-      title: title.join(' '),
+      // "Prep slides, 2h" → "Prep slides", not "Prep slides,".
+      title: title.join(' ').replaceFirst(RegExp(r'[\s,;:–-]+$'), ''),
       durationMinutes: duration,
       startTime: time,
       date: date,
       isOutcome: isOutcome,
+      priority: priority,
     );
+  }
+
+  static const _hourWords = {'hour', 'hours', 'hr', 'hrs'};
+  static const _minuteWords = {'minute', 'minutes', 'min', 'mins'};
+  static const _fillers = {
+    'about',
+    'around',
+    'roughly',
+    'approx',
+    'approximately',
+    'probably',
+    'maybe',
+    'for',
+    '~',
+  };
+  static const _deadlineWords = {'by', 'before', 'until', 'till', 'due'};
+
+  /// Rewrites plain-word phrases in [words] as shorthand, in place:
+  /// "2 hours" → `120m`, "an hour" → `60m`, "half an hour" → `30m`,
+  /// "10 minutes" → `10m`, "after work" → `at` + the workday's end.
+  static void _normalizePhrases(List<String> words, int workdayEndHour) {
+    String at(int i) => i < words.length ? _bare(words[i].toLowerCase()) : '';
+    for (var i = 0; i < words.length; i++) {
+      final w = at(i), next = at(i + 1);
+      if (w == 'half' &&
+          (next == 'an' || next == 'a') &&
+          _hourWords.contains(at(i + 2))) {
+        words.replaceRange(i, i + 3, ['30m']);
+        continue;
+      }
+      final n = (w == 'a' || w == 'an' || w == 'one')
+          ? 1.0
+          : double.tryParse(w);
+      if (n != null && n > 0) {
+        if (_hourWords.contains(next)) {
+          words.replaceRange(i, i + 2, ['${(n * 60).round()}m']);
+          continue;
+        }
+        if (_minuteWords.contains(next) && n == n.roundToDouble()) {
+          words.replaceRange(i, i + 2, ['${n.round()}m']);
+          continue;
+        }
+      }
+      if (w == 'after' && next == 'work' && workdayEndHour < 24) {
+        words.replaceRange(i, i + 2, ['at', '$workdayEndHour:00']);
+      }
+    }
+    // Hours then minutes, as two words ("1h 30m", "1 hour 30 minutes"):
+    // one length.
+    for (var i = 0; i + 1 < words.length; i++) {
+      final h = _hourTokenMinutes(at(i));
+      final m = _m.firstMatch(at(i + 1));
+      if (h != null && m != null && int.parse(m.group(1)!) < 60) {
+        words.replaceRange(i, i + 2, ['${h + int.parse(m.group(1)!)}m']);
+      }
+    }
+  }
+
+  /// Minutes in a whole-hour token: `1h`, `2hrs`, or the `60m`/`120m`
+  /// that "an hour" / "2 hours" became. Otherwise `null`.
+  static int? _hourTokenMinutes(String w) {
+    final h = _h.firstMatch(w);
+    if (h != null) {
+      final n = double.parse(h.group(1)!);
+      return n == n.roundToDouble() ? (n * 60).round() : null;
+    }
+    final m = _m.firstMatch(w);
+    if (m == null) return null;
+    final n = int.parse(m.group(1)!);
+    return n >= 60 && n % 60 == 0 ? n : null;
   }
 
   static bool _isAt(String w) => w == 'at' || w == '@';
@@ -182,6 +291,9 @@ class CaptureParser {
     required int startHour,
     required int endHour,
   }) {
+    if (w == 'noon' || w == 'midday') {
+      return const TimeOfDay(hour: 12, minute: 0);
+    }
     final a = _ampm.firstMatch(w);
     if (a != null) {
       final h = int.parse(a.group(1)!);

@@ -457,9 +457,10 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Moves the task with [id] from the viewed day to [date], resetting it
   /// to not started. It keeps its Outcome flag unless [date] is already at
-  /// the outcome cap. Pinned tasks become floating, since their time was
-  /// chosen for the original day. Without a repository the task is only
-  /// removed from the viewed day.
+  /// the outcome cap. A set-time task keeps its time (a 3 PM call is still
+  /// at 3 PM), unless that clashes with another set-time item or meeting
+  /// of yours already on [date]; then it becomes Anytime. Without a
+  /// repository the task is only removed from the viewed day.
   ///
   /// Returns the task as saved on [date] (check its Outcome flag), or
   /// `null` if nothing was moved.
@@ -476,6 +477,18 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     final targetOutcomes = targetTasks
         .where((t) => t.isOutcome && t.status != TaskStatus.cancelled)
         .length;
+    int startOf(Task t) => t.startTime!.hour * 60 + t.startTime!.minute;
+    final clashes =
+        task.type == TaskType.pinned &&
+        task.startTime != null &&
+        targetTasks.any(
+          (t) =>
+              t.type != TaskType.floating &&
+              t.startTime != null &&
+              t.status != TaskStatus.cancelled &&
+              startOf(t) < startOf(task) + task.durationMinutes &&
+              startOf(task) < startOf(t) + t.durationMinutes,
+        );
     final moved = task.copyWith(
       date: target,
       carriedFromDate: () => task.carriedFromDate ?? _viewedDate,
@@ -485,8 +498,8 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
       actualDurationMinutes: () => null,
       pausedRuns: const [],
       isOutcome: task.isOutcome && targetOutcomes < outcomeCap,
-      type: task.type == TaskType.pinned ? TaskType.floating : null,
-      startTime: task.type == TaskType.pinned ? () => null : null,
+      type: clashes ? TaskType.floating : null,
+      startTime: clashes ? () => null : null,
       // The moved copy is a one-off; the series keeps its own days.
       recurringId: () => null,
     );
@@ -878,14 +891,37 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     final now = DateTime.now();
     if (_dateOnly(now) != _viewedDate) return null;
     final minutes = now.hour * 60 + now.minute;
-    return minutes - minutes % 5;
+    var start = minutes - minutes % 5;
+    // Rounding down must not plan work over something that just ended:
+    // a task finished or paused since the last 5-minute step.
+    void after(DateTime? end) {
+      if (end == null || _dateOnly(end) != _viewedDate) return;
+      final m = end.hour * 60 + end.minute;
+      if (m > start && m <= minutes) start = m;
+    }
+
+    for (final t in _tasks) {
+      if (t.status == TaskStatus.complete) after(t.completedAt);
+      for (final r in t.pausedRuns) {
+        after(r.end);
+      }
+    }
+    return start;
   }
 
   /// Re-flows today's schedule as the clock moves, so not-started work
   /// never sits in the past. Only work pushed out of the day is reported
   /// (see [_replanForTime]). No-op when not viewing today.
-  /// Set-time items on today whose time has passed without a Start, in
-  /// time order. Meetings are never "missed": they happen regardless.
+  /// Minutes after its start that a set-time item counts as missed:
+  /// [AppConstants.missedAfterMinutes], or its whole length if shorter.
+  static int _missedAfter(Task t) =>
+      t.durationMinutes < AppConstants.missedAfterMinutes
+      ? t.durationMinutes
+      : AppConstants.missedAfterMinutes;
+
+  /// Set-time items on today that started [_missedAfter] minutes ago or
+  /// more without a Start, in time order. Meetings are never "missed":
+  /// they happen regardless.
   List<Task> get missedItems {
     if (!isViewingToday) return const [];
     final now = DateTime.now();
@@ -896,7 +932,7 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
             t.status == TaskStatus.notStarted &&
             t.pausedRuns.isEmpty &&
             t.startTime != null &&
-            t.startTime!.hour * 60 + t.startTime!.minute + t.durationMinutes <=
+            t.startTime!.hour * 60 + t.startTime!.minute + _missedAfter(t) <=
                 nowMinutes)
           t,
     ];
@@ -1025,7 +1061,18 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
   ScheduledTask? get currentItem {
     if (!isViewingToday) return null;
     final now = DateTime.now();
-    return DayStats.currentItem(_schedule, now.hour * 60 + now.minute);
+    // A missed item has its own card above; don't show it twice.
+    final missed = {for (final t in missedItems) t.id};
+    final schedule = missed.isEmpty
+        ? _schedule
+        : DaySchedule(
+            committed: [
+              for (final st in _schedule.committed)
+                if (!missed.contains(st.task.id)) st,
+            ],
+            overflow: _schedule.overflow,
+          );
+    return DayStats.currentItem(schedule, now.hour * 60 + now.minute);
   }
 
   /// The running task while the Now card shows something else (a meeting
@@ -1048,6 +1095,17 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     }
     final now = DateTime.now();
     final minutes = now.hour * 60 + now.minute;
+    // A set-time item that has just started (it doesn't take the card
+    // from the running task) is still flagged until it counts as missed.
+    for (final st in _schedule.committed) {
+      if (st.task.type == TaskType.pinned &&
+          st.task.status == TaskStatus.notStarted &&
+          st.task.pausedRuns.isEmpty &&
+          st.startMinutes <= minutes &&
+          minutes < st.startMinutes + _missedAfter(st.task)) {
+        return st;
+      }
+    }
     final next = DayStats.nextFixedItem(_schedule, minutes);
     if (next == null ||
         next.startMinutes - minutes > AppConstants.meetingWarningMinutes) {
@@ -1067,8 +1125,7 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     for (final t in [..._eventTasks, ..._tasks]) {
       if (_heldStarts.containsKey(t.id)) continue;
       // Finished items free their time (see Scheduler).
-      if (t.status == TaskStatus.complete ||
-          t.status == TaskStatus.cancelled) {
+      if (t.status == TaskStatus.complete || t.status == TaskStatus.cancelled) {
         continue;
       }
       if (t.status == TaskStatus.inProgress && t.startedAt != null) {
@@ -1125,10 +1182,19 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     final base = _suggestionBase ?? _schedule;
     _reschedule();
 
-    final candidate = _buildSuggestion(
+    // After your own change, only work pushed out of the day raises the
+    // card: Outcomes moving later is right there on the timeline. (The
+    // clock still flags an Outcome that slips 30+ minutes; see
+    // [_replanForTime].)
+    final diff = _buildSuggestion(
       base,
       _schedule,
       excludeTaskId: excludeTaskId,
+    );
+    final candidate = ScheduleSuggestion(
+      proposed: diff.proposed,
+      moves: const [],
+      pushedOut: diff.pushedOut,
     );
     _suggestion = candidate.hasChanges ? candidate : null;
     _suggestionBase = candidate.hasChanges ? base : null;
@@ -1258,10 +1324,13 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
       );
     }
 
-    // Fixed-time items (Meetings and Set-time items) may not overlap each
-    // other. Finished items no longer hold their slot for this purpose.
-    for (final existing in against ?? [..._eventTasks, ..._tasks]) {
+    // Your own fixed-time items (Meetings and Set-time items) may not
+    // overlap each other. Calendar meetings don't block them: you may be
+    // skipping one, and the timeline stripes the overlap. Finished items
+    // no longer hold their slot for this purpose.
+    for (final existing in against ?? _tasks) {
       if (existing.id == excludeId) continue;
+      if (isImported(existing)) continue;
       if (existing.type == TaskType.floating) continue;
       if (existing.startTime == null) continue;
       if (existing.status == TaskStatus.cancelled ||

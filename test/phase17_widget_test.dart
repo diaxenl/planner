@@ -50,9 +50,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Review PRs'));
     await tester.pumpAndSettle();
-    expect(find.text('Edit item'), findsOneWidget);
+    expect(find.text('Item'), findsOneWidget);
     expect(find.text('Review PRs'), findsNWidgets(2)); // agenda + field
-    expect(find.text('Do next'), findsOneWidget);
+    expect(find.text('Do this next'), findsOneWidget);
     expect(find.text('Pick a day…'), findsOneWidget);
     expect(find.text('4h'), findsOneWidget);
     expect(find.text('Weekdays'), findsOneWidget);

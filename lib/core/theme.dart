@@ -162,12 +162,23 @@ class AppTheme {
       ),
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith(
-          (s) => s.contains(WidgetState.selected) ? c.onAccent : c.textMuted,
+          // Off is a clear, solid "off", not a faded "disabled".
+          (s) => s.contains(WidgetState.disabled)
+              ? c.textMuted
+              : s.contains(WidgetState.selected)
+              ? c.onAccent
+              : c.textSecondary,
         ),
         trackColor: WidgetStateProperty.resolveWith(
           (s) => s.contains(WidgetState.selected) ? c.accent : c.hairline,
         ),
-        trackOutlineColor: WidgetStateProperty.all(Colors.transparent),
+        trackOutlineColor: WidgetStateProperty.resolveWith(
+          (s) =>
+              s.contains(WidgetState.selected) ||
+                  s.contains(WidgetState.disabled)
+              ? Colors.transparent
+              : c.textSecondary,
+        ),
       ),
     );
   }

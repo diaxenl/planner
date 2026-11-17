@@ -40,20 +40,32 @@ class DayScreen extends StatefulWidget {
 }
 
 class _DayScreenState extends State<DayScreen> {
-  /// Once a minute, re-flow today's schedule so nothing sits in the past.
-  late final Timer _minuteTicker;
+  /// Re-flows today's schedule on each turn of the clock's minute, so
+  /// nothing sits in the past and a meeting that just ended leaves the
+  /// Now card at once (a free-running 1-minute timer could lag by ~60s).
+  Timer? _minuteTicker;
 
   @override
   void initState() {
     super.initState();
-    _minuteTicker = Timer.periodic(const Duration(minutes: 1), (_) {
-      if (mounted) DayPlannerProvider.of(context).tick();
+    _scheduleTick();
+  }
+
+  void _scheduleTick() {
+    final now = DateTime.now();
+    final untilNextMinute =
+        const Duration(minutes: 1) -
+        Duration(seconds: now.second, milliseconds: now.millisecond);
+    _minuteTicker = Timer(untilNextMinute, () {
+      if (!mounted) return;
+      DayPlannerProvider.of(context).tick();
+      _scheduleTick();
     });
   }
 
   @override
   void dispose() {
-    _minuteTicker.cancel();
+    _minuteTicker?.cancel();
     super.dispose();
   }
 
@@ -282,6 +294,7 @@ class _DayScreenState extends State<DayScreen> {
       startTime: p.startTime,
       isOutcome: asOutcome || p.isOutcome,
       isInterruption: interruption,
+      priority: p.priority ?? TaskPriority.normal,
       date: model.viewedDate,
     );
   }
@@ -387,6 +400,8 @@ class _DayScreenState extends State<DayScreen> {
       if (t.startTime != null)
         'at ${AppUtils.formatClock(t.startTime!.hour * 60 + t.startTime!.minute)}',
       if (t.isOutcome) 'Outcome',
+      if (!t.isOutcome && t.priority == TaskPriority.high) 'High priority',
+      if (!t.isOutcome && t.priority == TaskPriority.low) 'Low priority',
     ];
     return parts.join(' · ');
   }
@@ -467,6 +482,8 @@ class _DayScreenState extends State<DayScreen> {
             },
           );
         }
+      case ItemAction.pause:
+        _pause(model, task);
       case ItemAction.done:
         model.markComplete(task.id, DateTime.now());
         _snack(
@@ -503,11 +520,21 @@ class _DayScreenState extends State<DayScreen> {
     final moved = await model.moveToDate(task.id, day);
     final phrase = AppUtils.dayPhrase(day, DateTime.now());
     final lostOutcome = task.isOutcome && moved != null && !moved.isOutcome;
+    final lostTime =
+        task.type == TaskType.pinned &&
+        moved != null &&
+        moved.type != TaskType.pinned;
+    final at = moved?.startTime == null
+        ? ''
+        : ' at ${AppUtils.formatClock(moved!.startTime!.hour * 60 + moved.startTime!.minute)}';
     _snack(
       lostOutcome
           ? 'Moved "${task.title}" to $phrase — not as an Outcome, '
                 'that day is full'
-          : 'Moved "${task.title}" to $phrase',
+          : lostTime
+          ? 'Moved "${task.title}" to $phrase — as Anytime, '
+                'that time is taken'
+          : 'Moved "${task.title}" to $phrase$at',
       undo: () {
         // Only meaningful while still on the day it came from.
         if (model.viewedDate == from) {

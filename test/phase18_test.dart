@@ -193,7 +193,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(standup);
     await tester.pumpAndSettle();
-    expect(find.text('Edit item'), findsOneWidget);
+    expect(find.text('Item'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     model.dispose();

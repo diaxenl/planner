@@ -147,7 +147,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
           ),
           _bucket(
             context,
-            'Other',
+            'Other tasks',
             colors.other,
             actual[TimeBucket.other]!,
             planned[TimeBucket.other]!,
@@ -165,8 +165,12 @@ class _ReviewScreenState extends State<ReviewScreen> {
           Text(switch (_accuracy) {
             null => 'Use Start and Done to see how your estimates hold up.',
             0 => 'Your estimates were spot on.',
-            final a when a > 0 => 'Work ran $a% over your estimates.',
-            final a => 'Work came in ${-a}% under your estimates.',
+            final a when a > 0 =>
+              'Tasks took $a% longer than you guessed. '
+                  'Plan a little more time for them.',
+            final a =>
+              'Tasks took ${-a}% less time than you guessed. '
+                  'You can fit a bit more in.',
           }, style: text.bodyMedium),
           const SizedBox(height: 32),
 

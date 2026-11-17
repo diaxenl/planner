@@ -89,26 +89,32 @@ class AgendaList extends StatelessWidget {
           const SizedBox(height: 8),
           for (final t in schedule.overflow)
             _Row(
-              time: '—',
+              time: '',
               task: t,
               minutes: t.remainingMinutes,
               isCurrent: false,
               onTap: () => onTap(t),
             ),
         ],
-        if (finishedOffPlan.isNotEmpty) ...[
-          const SizedBox(height: 24),
-          Text('FINISHED', style: text.labelSmall),
-          const SizedBox(height: 8),
-          for (final t in finishedOffPlan)
-            _Row(
-              time: '',
-              task: t,
-              minutes: t.durationMinutes,
-              isCurrent: false,
-              onTap: () => onTap(t),
-            ),
-        ],
+        // Done work normally stays on the timeline; these are the ones
+        // that don't have a place there, named for what they are.
+        for (final (label, status) in [
+          ('DONE', TaskStatus.complete),
+          ("WON'T DO", TaskStatus.cancelled),
+        ])
+          if (finishedOffPlan.any((t) => t.status == status)) ...[
+            const SizedBox(height: 24),
+            Text(label, style: text.labelSmall),
+            const SizedBox(height: 8),
+            for (final t in finishedOffPlan.where((t) => t.status == status))
+              _Row(
+                time: '',
+                task: t,
+                minutes: t.durationMinutes,
+                isCurrent: false,
+                onTap: () => onTap(t),
+              ),
+          ],
       ],
     );
   }

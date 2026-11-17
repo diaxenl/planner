@@ -181,6 +181,33 @@ Owner feedback (2026-11-16): finishing a task doesn't pull other work into the f
 - [x] Tests (`phase22_test.dart`); Phase 17 breathing-room tests removed
 - [ ] Validation: analyze clean, tests green (same pre-existing review test failure); **remaining: check on a device** (phone disconnected)
 
+## Phase 23 — Two-Persona Browser Test Fixes
+From the Claude in Chrome high-performer and average-user day runs (2026-11-17). Owner chose bug fixes plus changes 1, 2, 4–10 (workday half-hour steps deferred).
+- [x] Bug: planning "now" (floored to 5m) no longer plans work over something just finished or paused
+- [x] Bug: the minute re-plan fires on the clock's minute, so an ended meeting leaves the Now card at once
+- [x] Bug: the item sheet clears an error (e.g. overlap) once the time, length or kind changes
+- [x] Tomorrow / Pick a day keeps a set time (becomes Anytime only if that time is taken by your own item that day)
+- [x] Missed: a set-time item counts as missed 10 minutes after its start (not after its end); the Now card doesn't repeat it
+- [x] Now card: only a meeting takes the card from a running task; a set-time item that starts shows as a warning instead
+- [x] Any Anytime work (not only Outcomes) splits into ≥30m sessions to use free time; running work stops at the next fixed block
+- [x] Now card: Pause on every running task
+- [x] Capture: "noon", lengths in words ("2 hours", "10 minutes", "an hour", "half an hour", fillers like "probably" dropped), "after work" (= workday end), deadlines ("by 4pm") stay in the title, `!` / `!low` priority (+ "! High" chip)
+- [x] Your own items may overlap calendar meetings (you may be skipping one; the timeline stripes it)
+- [x] Clarity: labelled "Came up" button; item sheet heading "Item" with Start as the main action and a Details section; "Do this next"; no "—" in Doesn't fit; "Other tasks"; plain-language estimate line in Review; Outcome switch reads as off, not disabled
+- [x] "Your day shifted" after your own change only when work is pushed out of the day (the clock still flags Outcomes slipping 30+ min)
+- [x] Delete moved to the sheet header; "Finished" list split into Done / Won't do
+- [ ] Deferred: workday hours in 30-minute steps (hours are whole numbers across scheduler, settings and stats)
+- [x] Tests (`phase23_test.dart`, `bugfix_planning_start_test.dart`; older tests updated for the new rules)
+- [x] Validation: device check on Android (SM S921U, 360dp wide), real calendar
+- [x] Found on device and fixed:
+  - Short timeline blocks beside a meeting: the time text overflowed and hid the title
+  - Closing an item or "Came up" sheet re-opened the keyboard (focus went back to the add field)
+  - "1h 30m" (two words) was read as 1h, with "30m" left in the title
+  - Now card: "Pause" wrapped onto two lines on a running task
+  - Item sheet: a running item had no Pause (added, next to Done)
+- [x] Tests: `test/phase23_widget_test.dart` (Missed list, "Your day shifted" banner, "Came up" sheet, item sheet Pause/Delete/Pick a day, keyboard, short-block overflow, Now card at phone width); line coverage 72.8% → 78.4%
+- [ ] Open: work that doesn't fit whole or in 30m+ sessions gets no time at all (e.g. a 2h Outcome with 1h 30m free; 45m with 15m + 40m free shows "55m free · 45m won't fit"). Placing what fits would match "fill free time even if not finished" — needs a decision
+
 ---
 
 **Current status:** Engine (Phases 1–9) complete. Phases 10–13, 15, 16 and 17 complete (17 awaiting a live persona re-run). Phase 14 code complete with `device_calendar` 4.3.3 (owner-approved 2026-11-05); **remaining: Android SDK install (+ Windows Developer Mode for plugin builds) and a real-device check with Google, Microsoft and iCloud accounts.**
