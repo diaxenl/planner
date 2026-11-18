@@ -28,9 +28,6 @@ import '../services/scheduler.dart';
 /// Overlap validation: [addTask] and [updateTask] throw [ArgumentError]
 /// if a hard/pinned task's time range overlaps with an existing hard task.
 ///
-/// Outcome cap: [addTask] and [updateTask] throw [ArgumentError] if the
-/// day would have more than [outcomeCap] Outcomes.
-///
 /// Persistence: when a [DayRepository] is provided, the model loads tasks
 /// from storage on [loadDate] and saves them after every mutation with a
 /// 500 ms debounce. On [AppLifecycleState.paused] the save is immediate.
@@ -80,9 +77,6 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
   /// Released by the next user mutation, or when the hold falls into the
   /// past or collides with a fixed block (e.g. an overrunning task).
   final Map<String, TimeOfDay> _heldStarts = {};
-
-  /// Maximum number of Outcomes per day. Owned by settings; defaults to 3.
-  int outcomeCap = 3;
 
   int _workdayStartHour = AppConstants.defaultWorkdayStartHour;
   int _workdayEndHour = AppConstants.defaultWorkdayEndHour;
@@ -190,7 +184,6 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
   void addTask(Task task, {int? index}) {
     _validateDuration(task);
     _validateOverlap(task);
-    _validateOutcomeCap(task);
     if (index != null && index >= 0 && index <= _tasks.length) {
       _tasks.insert(index, task);
     } else {
@@ -230,7 +223,6 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     if (index == -1) return;
     _validateDuration(updated);
     _validateOverlap(updated, excludeId: id);
-    _validateOutcomeCap(updated, excludeId: id);
 
     final old = _tasks[index];
     _tasks[index] = updated;
@@ -456,13 +448,11 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   /// Moves the task with [id] from the viewed day to [date], resetting it
-  /// to not started. It keeps its Outcome flag unless [date] is already at
-  /// the outcome cap. Pinned tasks become floating, since their time was
+  /// to not started. It keeps its Outcome flag. Pinned tasks become floating, since their time was
   /// chosen for the original day. Without a repository the task is only
   /// removed from the viewed day.
   ///
-  /// Returns the task as saved on [date] (check its Outcome flag), or
-  /// `null` if nothing was moved.
+  /// Returns the task as saved on [date], or `null` if nothing was moved.
   Future<Task?> moveToDate(String id, DateTime date) async {
     final target = _dateOnly(date);
     if (target == _viewedDate) return null;
@@ -473,9 +463,6 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
 
     if (_repository == null) return null;
     final targetTasks = await _repository.load(target);
-    final targetOutcomes = targetTasks
-        .where((t) => t.isOutcome && t.status != TaskStatus.cancelled)
-        .length;
     final moved = task.copyWith(
       date: target,
       carriedFromDate: () => task.carriedFromDate ?? _viewedDate,
@@ -484,7 +471,6 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
       completedAt: () => null,
       actualDurationMinutes: () => null,
       pausedRuns: const [],
-      isOutcome: task.isOutcome && targetOutcomes < outcomeCap,
       type: task.type == TaskType.pinned ? TaskType.floating : null,
       startTime: task.type == TaskType.pinned ? () => null : null,
       // The moved copy is a one-off; the series keeps its own days.
@@ -515,10 +501,9 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Adds [task] to [date]: the viewed day goes through [addTask];
   /// any other day is saved straight to the repository, checked against
-  /// that day's meetings and set-time items. The Outcome flag is dropped
-  /// if [date] is already at the cap.
+  /// that day's meetings and set-time items.
   ///
-  /// Returns the task as saved (check its Outcome flag). Throws
+  /// Returns the task as saved. Throws
   /// [ArgumentError] like [addTask], or if there is nowhere to save.
   Future<Task> addTaskToDate(Task task, DateTime date) async {
     final target = _dateOnly(date);
@@ -541,13 +526,7 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
       task,
       against: [..._toEventTasks(events, target), ...targetTasks],
     );
-    final outcomes = targetTasks
-        .where((t) => t.isOutcome && t.status != TaskStatus.cancelled)
-        .length;
-    final saved = task.copyWith(
-      date: target,
-      isOutcome: task.isOutcome && outcomes < outcomeCap,
-    );
+    final saved = task.copyWith(date: target);
     await _repository.save(target, [...targetTasks, saved]);
     return saved;
   }
@@ -624,7 +603,7 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Adds today's (or a future day's) copy of every series that occurs
   /// on the viewed day and doesn't have one yet. Past days are left as
-  /// they were. A copy is an Outcome only while the day is under the cap.
+  /// they were.
   /// Returns whether anything was added.
   bool _addRepeats() {
     final series = _series;
@@ -634,15 +613,7 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     for (final s in series) {
       if (!s.occursOn(_viewedDate)) continue;
       if (_tasks.any((t) => t.recurringId == s.id)) continue;
-      final outcomes = _tasks
-          .where((t) => t.isOutcome && t.status != TaskStatus.cancelled)
-          .length;
-      _tasks.add(
-        s.instanceFor(
-          _viewedDate,
-          asOutcome: s.isOutcome && outcomes < outcomeCap,
-        ),
-      );
+      _tasks.add(s.instanceFor(_viewedDate, asOutcome: s.isOutcome));
       added = true;
     }
     return added;
@@ -1288,32 +1259,6 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     if (task.durationMinutes < AppConstants.durationMinMinutes ||
         task.durationMinutes > AppConstants.durationMaxMinutes) {
       throw ArgumentError('Duration must be 5 minutes to 8 hours.');
-    }
-  }
-
-  /// Throws [ArgumentError] if [task] is an Outcome and the day already
-  /// has [outcomeCap] active (non-cancelled) Outcomes besides [excludeId].
-  /// Edits that keep an existing Outcome an Outcome are always allowed, so
-  /// lowering the cap never locks today's Outcomes.
-  void _validateOutcomeCap(Task task, {String? excludeId}) {
-    if (!task.isOutcome) return;
-    if (excludeId != null &&
-        _tasks.any((t) => t.id == excludeId && t.isOutcome)) {
-      return;
-    }
-    final count = _tasks
-        .where(
-          (t) =>
-              t.id != excludeId &&
-              t.isOutcome &&
-              t.status != TaskStatus.cancelled,
-        )
-        .length;
-    if (count >= outcomeCap) {
-      throw ArgumentError(
-        "That's your limit of $outcomeCap outcome${outcomeCap == 1 ? '' : 's'} "
-        'for the day. Remove one, or raise the limit in Settings.',
-      );
     }
   }
 

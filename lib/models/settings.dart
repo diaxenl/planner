@@ -6,7 +6,6 @@ import '../core/constants.dart';
 class Settings {
   const Settings({
     this.themeMode = ThemeMode.dark,
-    this.outcomeCap = AppConstants.defaultOutcomeCap,
     this.selectedCalendarIds,
     this.workdayStartHour = AppConstants.defaultWorkdayStartHour,
     this.workdayEndHour = AppConstants.defaultWorkdayEndHour,
@@ -14,10 +13,6 @@ class Settings {
 
   /// Dark by default.
   final ThemeMode themeMode;
-
-  /// Maximum Outcomes per day (see [AppConstants.minOutcomeCap] /
-  /// [AppConstants.maxOutcomeCap]).
-  final int outcomeCap;
 
   /// Calendars to import meetings from. `null` means all calendars.
   final Set<String>? selectedCalendarIds;
@@ -33,14 +28,12 @@ class Settings {
 
   Settings copyWith({
     ThemeMode? themeMode,
-    int? outcomeCap,
     Set<String>? Function()? selectedCalendarIds,
     int? workdayStartHour,
     int? workdayEndHour,
   }) {
     return Settings(
       themeMode: themeMode ?? this.themeMode,
-      outcomeCap: outcomeCap ?? this.outcomeCap,
       selectedCalendarIds: selectedCalendarIds != null
           ? selectedCalendarIds()
           : this.selectedCalendarIds,
@@ -51,7 +44,6 @@ class Settings {
 
   Map<String, dynamic> toJson() => {
     'themeMode': themeMode.name,
-    'outcomeCap': outcomeCap,
     'selectedCalendarIds': selectedCalendarIds?.toList(),
     'workdayStartHour': workdayStartHour,
     'workdayEndHour': workdayEndHour,
@@ -63,7 +55,6 @@ class Settings {
     final themeMode = ThemeMode.values
         .where((m) => m.name == json['themeMode'])
         .firstOrNull;
-    final cap = json['outcomeCap'];
     final ids = json['selectedCalendarIds'];
     final start = json['workdayStartHour'];
     final end = json['workdayEndHour'];
@@ -71,12 +62,6 @@ class Settings {
         start is int && end is int && isValidWorkday(start, end);
     return Settings(
       themeMode: themeMode ?? defaults.themeMode,
-      outcomeCap:
-          cap is int &&
-              cap >= AppConstants.minOutcomeCap &&
-              cap <= AppConstants.maxOutcomeCap
-          ? cap
-          : defaults.outcomeCap,
       selectedCalendarIds: ids is List ? ids.whereType<String>().toSet() : null,
       workdayStartHour: validWorkday ? start : defaults.workdayStartHour,
       workdayEndHour: validWorkday ? end : defaults.workdayEndHour,

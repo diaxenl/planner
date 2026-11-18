@@ -6,7 +6,7 @@ import '../../../models/day_schedule.dart';
 import '../../../models/task.dart';
 
 /// The day's Outcomes with check state, when each is scheduled, and an
-/// add affordance while under the cap. Open Outcomes are listed in
+/// add affordance. Open Outcomes are listed in
 /// priority order and can be dragged to reorder ([onReorder]); the first
 /// is planned first.
 class OutcomesList extends StatelessWidget {
@@ -14,7 +14,6 @@ class OutcomesList extends StatelessWidget {
     super.key,
     required this.tasks,
     required this.schedule,
-    required this.cap,
     required this.onDone,
     required this.onTap,
     required this.onAdd,
@@ -25,7 +24,6 @@ class OutcomesList extends StatelessWidget {
   /// Every Outcome on the day, any status.
   final List<Task> tasks;
   final DaySchedule schedule;
-  final int cap;
   final ValueChanged<Task> onDone;
   final ValueChanged<Task> onTap;
   final VoidCallback onAdd;
@@ -35,6 +33,10 @@ class OutcomesList extends StatelessWidget {
 
   /// "today", "tomorrow", or "this day" — for the empty prompt.
   final String dayLabel;
+
+  /// Tallest the Outcomes list grows before it scrolls: about four rows,
+  /// with the next one peeking in to show there's more.
+  static const double _listMaxHeight = 280;
 
   @override
   Widget build(BuildContext context) {
@@ -70,30 +72,37 @@ class OutcomesList extends StatelessWidget {
         if (tasks.isEmpty)
           _AddRow(label: 'What would make $dayLabel a win?', onTap: onAdd)
         else ...[
-          ReorderableListView(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            buildDefaultDragHandles: false,
-            onReorderItem: (oldIndex, newIndex) {
-              final ids = [for (final t in open) t.id];
-              ids.insert(newIndex, ids.removeAt(oldIndex));
-              onReorder(ids);
-            },
-            children: [
-              for (var i = 0; i < open.length; i++)
-                KeyedSubtree(
-                  key: ValueKey(open[i].id),
-                  child: _row(
-                    context,
-                    open[i],
-                    dragIndex: open.length > 1 ? i : null,
+          // Outcomes scroll inside a bounded box so a long list doesn't
+          // push the rest of the day down; the add row stays below it.
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: _listMaxHeight),
+            child: ReorderableListView(
+              shrinkWrap: true,
+              buildDefaultDragHandles: false,
+              footer: finished.isEmpty
+                  ? null
+                  : Column(
+                      children: [for (final t in finished) _row(context, t)],
+                    ),
+              onReorderItem: (oldIndex, newIndex) {
+                final ids = [for (final t in open) t.id];
+                ids.insert(newIndex, ids.removeAt(oldIndex));
+                onReorder(ids);
+              },
+              children: [
+                for (var i = 0; i < open.length; i++)
+                  KeyedSubtree(
+                    key: ValueKey(open[i].id),
+                    child: _row(
+                      context,
+                      open[i],
+                      dragIndex: open.length > 1 ? i : null,
+                    ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
-          for (final t in finished) _row(context, t),
-          if (active.length < cap)
-            _AddRow(label: 'Add an outcome', onTap: onAdd),
+          _AddRow(label: 'Add an outcome', onTap: onAdd),
         ],
       ],
     );

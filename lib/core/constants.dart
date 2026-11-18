@@ -43,10 +43,4 @@ class AppConstants {
   /// How far the clock may push an Outcome later (while the user does
   /// something else) before the day screen says so.
   static const int outcomeSlipMinutes = 30;
-
-  // ── Outcomes ────────────────────────────────────────────────────────
-  /// Default and allowed range for the daily outcome cap (Settings).
-  static const int defaultOutcomeCap = 3;
-  static const int minOutcomeCap = 1;
-  static const int maxOutcomeCap = 5;
 }

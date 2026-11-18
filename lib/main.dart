@@ -32,14 +32,12 @@ void main() async {
           calendarSource: calendar,
           recurringRepository: LocalRecurringRepository(),
         )
-        ..outcomeCap = settings.settings.outcomeCap
         ..calendarIds = settings.settings.selectedCalendarIds
         ..setWorkday(
           settings.settings.workdayStartHour,
           settings.settings.workdayEndHour,
         );
   settings.addListener(() {
-    model.outcomeCap = settings.settings.outcomeCap;
     model.setWorkday(
       settings.settings.workdayStartHour,
       settings.settings.workdayEndHour,

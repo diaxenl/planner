@@ -279,31 +279,14 @@ void main() {
     setUp(() => model = DayPlannerModel()..setWorkday(6, 23));
     tearDown(() => model.dispose());
 
-    test('adding beyond the outcome cap is rejected', () {
-      for (var i = 0; i < 3; i++) {
+    test('there is no limit on how many Outcomes a day has', () {
+      for (var i = 0; i < 8; i++) {
         model.addTask(_floating('O$i', outcome: true));
       }
-      expect(() => model.addTask(_floating('O3', outcome: true)),
-          throwsArgumentError);
-      expect(model.tasks.length, 3);
-    });
-
-    test('the cap is configurable', () {
-      model.outcomeCap = 1;
-      model.addTask(_floating('O0', outcome: true));
-      expect(() => model.addTask(_floating('O1', outcome: true)),
-          throwsArgumentError);
-    });
-
-    test('cancelled outcomes free a slot; editing one does not self-count',
-        () {
-      model.outcomeCap = 1;
-      final first = _floating('O0', outcome: true);
-      model.addTask(first);
-      model.updateTask(first.id, first.copyWith(title: 'Renamed'));
-      model.cancelTask(first.id);
-      model.addTask(_floating('O1', outcome: true));
-      expect(model.tasks.where((t) => t.isOutcome).length, 2);
+      final plain = _floating('Plain');
+      model.addTask(plain);
+      model.updateTask(plain.id, plain.copyWith(isOutcome: true));
+      expect(model.tasks.where((t) => t.isOutcome).length, 9);
     });
 
     test('isOutcome / isInterruption round-trip; legacy priority ignored', () {
@@ -363,19 +346,15 @@ void main() {
       expect(moved.startTime, isNull);
     });
 
-    test('keeps Outcome unless the target day is full', () async {
-      model.outcomeCap = 1;
-      final a = task('A', outcome: true);
-      model.addTask(a);
-      await model.moveToDate(a.id, tomorrow);
-      expect((await repo.load(tomorrow)).single.isOutcome, isTrue);
-
-      final b = task('B', outcome: true);
-      model.addTask(b);
-      await model.moveToDate(b.id, tomorrow);
-      final bMoved =
-          (await repo.load(tomorrow)).firstWhere((t) => t.id == b.id);
-      expect(bMoved.isOutcome, isFalse);
+    test('keeps Outcome however many the target day has', () async {
+      for (final title in ['A', 'B', 'C', 'D']) {
+        final t = task(title, outcome: true);
+        model.addTask(t);
+        await model.moveToDate(t.id, tomorrow);
+      }
+      final moved = await repo.load(tomorrow);
+      expect(moved.length, 4);
+      expect(moved.every((t) => t.isOutcome), isTrue);
     });
 
     test('a future day is planned from the start of the day window',
@@ -440,20 +419,6 @@ void main() {
       model.cancelTask(a.id);
       model.addTask(fixed('B', TaskType.hard, 10));
       expect(model.tasks.length, 2);
-    });
-
-    test('lowering the cap never locks editing existing Outcomes', () {
-      final outcomes = [
-        for (var i = 0; i < 3; i++) _floating('O$i', outcome: true),
-      ];
-      outcomes.forEach(model.addTask);
-      model.outcomeCap = 2;
-      model.updateTask(outcomes[0].id, outcomes[0].copyWith(title: 'Renamed'));
-      expect(model.tasks.first.title, 'Renamed');
-      final plain = _floating('Plain');
-      model.addTask(plain);
-      expect(() => model.updateTask(plain.id, plain.copyWith(isOutcome: true)),
-          throwsArgumentError);
     });
   });
 

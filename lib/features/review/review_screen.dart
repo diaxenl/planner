@@ -254,14 +254,10 @@ class _ReviewScreenState extends State<ReviewScreen> {
     final model = DayPlannerProvider.of(context);
     final from = model.viewedDate;
     final index = model.tasks.indexWhere((t) => t.id == task.id);
-    final moved = await model.moveToDate(task.id, day);
+    await model.moveToDate(task.id, day);
     final phrase = AppUtils.dayPhrase(day, DateTime.now());
-    final lostOutcome = task.isOutcome && moved != null && !moved.isOutcome;
     _snack(
-      lostOutcome
-          ? 'Moved "${task.title}" to $phrase — not as an Outcome, '
-                'that day is full'
-          : 'Moved "${task.title}" to $phrase',
+      'Moved "${task.title}" to $phrase',
       () {
         if (model.viewedDate == from) {
           model.undoMoveToDate(task, day, index: index);

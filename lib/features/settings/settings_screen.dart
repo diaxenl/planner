@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 
-import '../../core/constants.dart';
 import '../../core/theme.dart';
 import '../../core/utils.dart';
 import '../../models/calendar_event.dart';
 import '../../state/day_planner_provider.dart';
 import '../../state/settings_provider.dart';
 
-/// Theme, outcome cap, and which calendars to import meetings from.
+/// Theme, workday hours, and which calendars to import meetings from.
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
@@ -19,7 +18,6 @@ class SettingsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final model = SettingsProvider.of(context);
     final settings = model.settings;
-    final colors = HyperColors.of(context);
     final text = Theme.of(context).textTheme;
 
     return Scaffold(
@@ -44,51 +42,6 @@ class SettingsScreen extends StatelessWidget {
             ],
             selected: {settings.themeMode},
             onSelectionChanged: (s) => model.setThemeMode(s.first),
-          ),
-          const SizedBox(height: 32),
-          Text('OUTCOMES', style: text.labelSmall),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Outcomes per day', style: text.bodyLarge),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Fewer is sharper. 3 is a good default.',
-                      style: text.bodyMedium,
-                    ),
-                  ],
-                ),
-              ),
-              IconButton(
-                tooltip: 'Fewer',
-                onPressed: settings.outcomeCap > AppConstants.minOutcomeCap
-                    ? () => model.setOutcomeCap(settings.outcomeCap - 1)
-                    : null,
-                icon: const Icon(Icons.remove),
-              ),
-              SizedBox(
-                width: 28,
-                child: Text(
-                  '${settings.outcomeCap}',
-                  textAlign: TextAlign.center,
-                  style: text.titleLarge?.copyWith(
-                    color: colors.accent,
-                    fontFeatures: AppTheme.tabularFigures,
-                  ),
-                ),
-              ),
-              IconButton(
-                tooltip: 'More',
-                onPressed: settings.outcomeCap < AppConstants.maxOutcomeCap
-                    ? () => model.setOutcomeCap(settings.outcomeCap + 1)
-                    : null,
-                icon: const Icon(Icons.add),
-              ),
-            ],
           ),
           const SizedBox(height: 32),
           Text('WORKDAY', style: text.labelSmall),

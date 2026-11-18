@@ -223,7 +223,6 @@ class _DayScreenState extends State<DayScreen> {
     OutcomesList(
       tasks: model.tasks.where((t) => t.isOutcome).toList(),
       schedule: model.schedule,
-      cap: model.outcomeCap,
       dayLabel: dayLabel.startsWith('on ') ? 'this day' : dayLabel,
       onDone: (t) => _act(ItemAction.done, t),
       onTap: (t) => _edit(model, t),
@@ -287,7 +286,7 @@ class _DayScreenState extends State<DayScreen> {
   }
 
   /// Adds straight away and confirms with an Edit shortcut; if the model
-  /// rejects it (overlap, cap, out of range), opens the sheet to fix it.
+  /// rejects it (overlap, out of range), opens the sheet to fix it.
   void _capture(DayPlannerModel model, String raw, {bool asOutcome = false}) {
     final task = _fromCapture(model, raw, asOutcome: asOutcome);
     final date = _parse(model, raw).date;
@@ -338,11 +337,8 @@ class _DayScreenState extends State<DayScreen> {
       return;
     }
     final day = AppUtils.dayPhrase(date, DateTime.now());
-    final lostOutcome = task.isOutcome && !saved.isOutcome;
     _snack(
-      lostOutcome
-          ? 'Added "${task.title}" to $day — not as an Outcome, that day is full'
-          : 'Added "${task.title}" to $day · ${_describe(saved)}',
+      'Added "${task.title}" to $day · ${_describe(saved)}',
       actionLabel: 'Show',
       onAction: () => model.setViewedDate(date),
     );
@@ -500,14 +496,10 @@ class _DayScreenState extends State<DayScreen> {
   Future<void> _moveTo(DayPlannerModel model, Task task, DateTime day) async {
     final from = model.viewedDate;
     final index = model.tasks.indexWhere((t) => t.id == task.id);
-    final moved = await model.moveToDate(task.id, day);
+    await model.moveToDate(task.id, day);
     final phrase = AppUtils.dayPhrase(day, DateTime.now());
-    final lostOutcome = task.isOutcome && moved != null && !moved.isOutcome;
     _snack(
-      lostOutcome
-          ? 'Moved "${task.title}" to $phrase — not as an Outcome, '
-                'that day is full'
-          : 'Moved "${task.title}" to $phrase',
+      'Moved "${task.title}" to $phrase',
       undo: () {
         // Only meaningful while still on the day it came from.
         if (model.viewedDate == from) {
