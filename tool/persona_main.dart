@@ -119,14 +119,12 @@ void main() async {
   await settings.load();
   final model =
       DayPlannerModel(repository: MemDays(), calendarSource: FakeCalendar())
-        ..outcomeCap = settings.settings.outcomeCap
         ..calendarIds = settings.settings.selectedCalendarIds
         ..setWorkday(
           settings.settings.workdayStartHour,
           settings.settings.workdayEndHour,
         );
   settings.addListener(() {
-    model.outcomeCap = settings.settings.outcomeCap;
     model.setWorkday(
       settings.settings.workdayStartHour,
       settings.settings.workdayEndHour,

@@ -11,7 +11,7 @@ import '../../../state/day_planner_model.dart';
 /// Bottom sheet to create, confirm, or edit an item.
 ///
 /// Saves through [DayPlannerModel] directly so validation errors from the
-/// model (overlap, outcome cap) show inline instead of closing the sheet.
+/// model (overlap) show inline instead of closing the sheet.
 /// Pops `true` when something was saved or deleted.
 ///
 /// For an existing, unfinished item it also offers Start / Done / Cancel /
@@ -119,19 +119,6 @@ class _ItemSheetState extends State<ItemSheet> {
       return _importedView(context, existing);
     }
 
-    final atCap =
-        !_isOutcome &&
-        !(existing?.isOutcome ?? false) &&
-        widget.model.tasks
-                .where(
-                  (t) =>
-                      t.id != existing?.id &&
-                      t.isOutcome &&
-                      t.status != TaskStatus.cancelled,
-                )
-                .length >=
-            widget.model.outcomeCap;
-
     return Padding(
       padding: EdgeInsets.only(
         left: 20,
@@ -203,14 +190,11 @@ class _ItemSheetState extends State<ItemSheet> {
               contentPadding: EdgeInsets.zero,
               title: Text('Outcome', style: text.bodyLarge),
               subtitle: Text(
-                atCap
-                    ? "You're at your limit of ${widget.model.outcomeCap}. "
-                          'Change it in Settings.'
-                    : 'One of the few things that make the day a win',
+                'One of the things that make the day a win',
                 style: text.bodyMedium,
               ),
               value: _isOutcome,
-              onChanged: atCap ? null : (v) => setState(() => _isOutcome = v),
+              onChanged: (v) => setState(() => _isOutcome = v),
             ),
             if (_type == TaskType.floating && !_isOutcome) ...[
               const SizedBox(height: 8),
