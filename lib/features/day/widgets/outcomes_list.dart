@@ -131,6 +131,13 @@ class OutcomesList extends StatelessWidget {
           : 'Done';
     } else if (overflowing) {
       when = "Doesn't fit, even split up — shorten it or move it";
+    } else if (placed != null && schedule.unplanned.containsKey(task.id)) {
+      final total = sessions.fold<int>(0, (m, st) => m + st.durationMinutes);
+      when =
+          '${AppUtils.formatClock(placed.startMinutes)}'
+          ' · ${AppUtils.formatDuration(total)} today'
+          ' · ${AppUtils.formatDuration(schedule.unplanned[task.id]!)}'
+          " doesn't fit";
     } else if (placed != null && placed.isSplit) {
       final total = sessions.fold<int>(0, (m, st) => m + st.durationMinutes);
       when =

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/utils.dart';
+import '../../models/meeting_pause.dart';
 import '../../models/scheduled_task.dart';
 import '../../models/task.dart';
 import '../../services/capture_parser.dart';
@@ -60,7 +61,13 @@ class _DayScreenState extends State<DayScreen> {
   @override
   Widget build(BuildContext context) {
     final model = DayPlannerProvider.of(context);
-    // Depend on settings so a changed outcome cap is reflected at once.
+    final meetingPause = model.takeMeetingPause();
+    if (meetingPause != null) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _showMeetingPause(model, meetingPause),
+      );
+    }
+    // Depend on settings so a change there is reflected at once.
     SettingsProvider.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isToday = model.isViewingToday;
@@ -517,6 +524,25 @@ class _DayScreenState extends State<DayScreen> {
       'Paused "${task.title}"',
       undo: () => model.updateTask(before.id, before),
     );
+  }
+
+  /// Tells the user a meeting paused (or, once over, resumed) the running
+  /// task. Undo on a pause keeps it running through the meeting.
+  void _showMeetingPause(DayPlannerModel model, MeetingPause pause) {
+    final title = pause.before.title;
+    final String message;
+    if (pause.resumed) {
+      message = pause.meetingTitle == null
+          ? 'Meeting over — resumed "$title"'
+          : 'Resumed "$title" after ${pause.meetingTitle}';
+    } else if (pause.after.resumeAt != null) {
+      message =
+          'Paused "$title" for ${pause.meetingTitle ?? 'a meeting'}'
+          ' — resumes at ${AppUtils.formatClock(pause.after.resumeAt!.hour * 60 + pause.after.resumeAt!.minute)}';
+    } else {
+      message = 'Paused "$title" — the meeting ran to the end of your day';
+    }
+    _snack(message, undo: () => model.undoMeetingPause(pause));
   }
 
   void _snack(

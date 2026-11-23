@@ -33,7 +33,7 @@ Every item has a title, a duration, and one of three kinds (plain-language label
 | **Anytime** | `floating` | Duration only. Scheduler places it. |
 
 Flags (no other categorization exists):
-- **Outcome** (`isOutcome`) — one of today's most important things. Replaces the Low/Med/High priority system entirely. The daily cap defaults to **3** and is adjustable in Settings (1–5) — focus is the point, but the number is the individual's call.
+- **Outcome** (`isOutcome`) — one of today's most important things. Replaces the Low/Med/High priority system entirely. There is **no cap** on how many a day has: focus is the point, but the number is the individual's call (owner decision, 2026-11-23).
 - **Interruption** (`isInterruption`) — set automatically when captured via "Something came up". Never set by hand.
 
 Status lifecycle is unchanged from Phase 8: `notStarted → inProgress → complete`, or `notStarted/inProgress → cancelled`.
@@ -42,6 +42,8 @@ Status lifecycle is unchanged from Phase 8: `notStarted → inProgress → compl
 
 - Meetings, at-a-set-time items, and in-progress items are fixed blocks (unchanged).
 - Anytime items fill gaps from now onward: **Outcomes first, in the order the user added them** (revised after persona review — shortest-first pushed big Outcomes late), then everything else, shorter first. (Replaces priority ordering.)
+- **Filling free time (Phase 23):** no free time is left that some task could use. "Do next" work takes the earliest free time, and the most important work (when it is long) starts in the first free time after that. Short tasks fill the short gaps (each gap under 30m gets the combination of short tasks that fills it most), long work gets the long gaps (whole in the earliest gap that holds it; otherwise split, first session as early as possible, the rest in the longest gaps). Tasks of 30m or less are never split, and no split session is shorter than 15m. An Outcome that doesn't fully fit is planned in part; the rest shows as not fitting.
+- **Meetings pause running work (Phase 23):** a meeting that starts while a task runs pauses it at the meeting's start (even if the app was closed), so meeting time is never counted as work; when the meeting (and any meeting straight after it) is over, the task resumes from the meeting's end, unless the user started something else or the workday is over. A toast says so, with Undo (Undo on a pause keeps it running through the meeting).
 - **One thing at a time:** starting a task pauses any other running task back to not started; minutes tracked so far are kept and add to its next run (Undo restores it).
 - **Time spent:** a task completed without ever being started counts its estimate as time spent (so the Review stays honest) but is left out of estimate accuracy.
 - Clock-driven replans (minute tick, overrun) apply moves silently and only raise an OK-only banner when work is pushed out of the day.
@@ -63,7 +65,7 @@ Status lifecycle is unchanged from Phase 8: `notStarted → inProgress → compl
 1. **Day** (home). Shows today by default; prev/next to plan other days.
    - **Load bar** — signature element. One horizontal bar for the remaining day window, split into Meetings / Outcomes / Other / Free. Readable in half a second.
    - **Now card** (today only) — the current item (in-progress, else the one whose window contains now, else the next upcoming), big live timer, **Start / Done / Cancel**. Overrun turns the timer to the accent warning color.
-   - **Outcomes** — up to the outcome cap, with check state. If none are set: a single prompt, "What would make today a win?"
+   - **Outcomes** — with check state. If none are set: a single prompt, "What would make today a win?"
    - **Agenda** — the rest of the day, one line per item: time · title · duration. Meetings visually quieter than work. Overflow at the end.
    - **Suggestion banner** — see the banner rule above (OK / Undo).
    - **Capture bar** — pinned to the bottom, like a message composer. Replaces the FAB.
@@ -72,8 +74,8 @@ Status lifecycle is unchanged from Phase 8: `notStarted → inProgress → compl
    - Time split, planned vs actual: Meetings / Outcomes / Other / Interruptions. Derived from kinds and flags — no tagging.
    - Estimate accuracy: one number (e.g. "Ran 18% over estimates").
    - Unfinished items, each decided explicitly: **Tomorrow** or **Drop**. This replaces automatic carry-forward.
-3. **Item sheet** — bottom sheet to confirm/edit an item: title, duration, kind (with a one-line explanation), time (picker opens automatically), Outcome toggle (disabled with a note at the cap). For an existing unfinished item: **Start / Done / Cancel / Tomorrow**. Done, Cancel and Delete all offer **Undo**. Imported meetings open read-only.
-4. **Settings** — calendars to include, theme (Dark default / Light / System), daily outcome cap (default 3).
+3. **Item sheet** — bottom sheet to confirm/edit an item: title, duration, kind (with a one-line explanation), time (picker opens automatically), Outcome toggle. For an existing unfinished item: **Start / Done / Cancel / Tomorrow**. Done, Cancel and Delete all offer **Undo**. Imported meetings open read-only.
+4. **Settings** — calendars to include, theme (Dark default / Light / System).
 
 The old vertical hour-grid timeline is **removed**. The load bar plus agenda replace it.
 
@@ -84,7 +86,7 @@ The old vertical hour-grid timeline is **removed**. The load bar plus agenda rep
   - Time: `3pm`, `15:00` → At a set time
   - Outcome: `*` anywhere marks it as an Outcome
   - Everything else is the title
-  - The item is **added immediately** with an "Added … · Edit" confirmation (revised after persona review: the extra confirm step was friction). If the model rejects it (overlap, cap, outside the day), the Item sheet opens pre-filled to fix it.
+  - The item is **added immediately** with an "Added … · Edit" confirmation (revised after persona review: the extra confirm step was friction). If the model rejects it (overlap, outside the day), the Item sheet opens pre-filled to fix it.
 - **"Something came up"** button next to the capture bar: type it, then pick **Now** (start it immediately, replanning the day) / **Later today** (Anytime) / **Tomorrow**. Marks the item as an Interruption. Shown when viewing today. The Now card always shows the most recently started item.
 
 ### Visual identity
@@ -137,7 +139,7 @@ No other packages may be added without explicit approval (see `AGENTS.md`).
 - **Workday:** Settings → Workday sets start and end hours (default 8 AM – 6 PM, whole hours, start before end). Floating work is planned, and free time counted, only inside the workday. Meetings and set-time items may sit anywhere in the day (an early call, a dinner).
 - **Time:** a fixed item must end by midnight.
 - **Overlap:** fixed-time items (Meetings, user-created or imported, and At-a-set-time items) may not overlap each other. Completed/cancelled items no longer hold their slot. Imported meetings may overlap each other (double-booking happens; the calendar is the source of truth).
-- **Outcomes:** at most the user's outcome cap per day (default 3, Settings 1–5); completed Outcomes still count (it's a per-day commitment). Exceeding it is rejected with a clear message. Editing an existing Outcome is always allowed, so lowering the cap never locks today's Outcomes.
+- **Outcomes:** no limit per day — how many is the individual's call. An Outcome that doesn't fully fit the free time left is planned in part, and the rest is shown as not fitting.
 - **Status transitions:** unchanged — Start only from `notStarted`; Done from `notStarted` (zero tracked time) or `inProgress`; Cancel from `notStarted` or `inProgress`.
 
 ---

@@ -168,7 +168,7 @@ void main() {
       expect(_startOf(s, small), 10 * 60 + 30);
     });
 
-    test('without Outcomes, shorter work goes first', () {
+    test('without Outcomes, work added first goes first', () {
       final long = Task(
         title: 'Long',
         durationMinutes: 60,
@@ -184,8 +184,8 @@ void main() {
 
       final s = _run([long, short], nowMinutes: 9 * 60);
 
-      expect(_startOf(s, short), 9 * 60);
-      expect(_startOf(s, long), 9 * 60 + 15);
+      expect(_startOf(s, long), 9 * 60);
+      expect(_startOf(s, short), 10 * 60);
     });
   });
 

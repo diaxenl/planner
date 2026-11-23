@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../core/constants.dart';
 import '../core/utils.dart';
 import '../models/day_schedule.dart';
+import '../models/meeting_pause.dart';
 import '../models/schedule_suggestion.dart';
 import '../models/scheduled_task.dart';
 import '../models/task.dart';
@@ -132,6 +133,7 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
       if (_addRepeats()) _scheduleSave();
     }
     _events = await _fetchEvents();
+    _pauseForMeetings();
 
     _reschedule();
     _anchorOutcomes();
@@ -288,6 +290,10 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
 
     final paused = <Task>[];
     for (var i = 0; i < _tasks.length; i++) {
+      // Starting something else: work a meeting paused stays paused.
+      if (_tasks[i].resumeAt != null) {
+        _tasks[i] = _tasks[i].copyWith(resumeAt: () => null);
+      }
       final t = _tasks[i];
       if (t.id == id || t.status != TaskStatus.inProgress) continue;
       paused.add(t);
@@ -334,7 +340,10 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
       return;
     }
 
-    _tasks[index] = current.copyWith(status: TaskStatus.cancelled);
+    _tasks[index] = current.copyWith(
+      status: TaskStatus.cancelled,
+      resumeAt: () => null,
+    );
     _rescheduleAndDiff(excludeTaskId: id);
     _ensureOverrunMonitor();
     _scheduleSave();
@@ -400,6 +409,7 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
       completedAt: () => completedAt,
       startedAt: () => startedAt,
       actualDurationMinutes: () => actualDurationMinutes,
+      resumeAt: () => null,
     );
 
     _rescheduleAndDiff(excludeTaskId: id);
@@ -830,6 +840,7 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
               : st,
       ],
       overflow: result.overflow,
+      unplanned: result.unplanned,
     );
   }
 
@@ -907,8 +918,148 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
 
   void tick() {
     if (!isViewingToday) return;
+    _pauseForMeetings();
     _replanForTime();
     notifyListeners();
+  }
+
+  // ── Meetings pause running work ─────────────────────────────────────
+
+  MeetingPause? _meetingPause;
+
+  /// Meetings the user chose to work through (Undo on the pause), by
+  /// task id.
+  final Map<String, Set<String>> _workThrough = {};
+
+  /// The latest pause or resume a meeting caused, once: the day screen
+  /// shows it as a toast. `null` if there is none.
+  MeetingPause? takeMeetingPause() {
+    final pause = _meetingPause;
+    _meetingPause = null;
+    return pause;
+  }
+
+  /// Undoes [pause]: the task goes back to how it was. A task paused by
+  /// meetings keeps running through them.
+  void undoMeetingPause(MeetingPause pause) {
+    if (!pause.resumed) {
+      _workThrough
+          .putIfAbsent(pause.before.id, () => {})
+          .addAll(pause.meetingIds);
+    }
+    updateTask(pause.before.id, pause.before.copyWith(resumeAt: () => null));
+  }
+
+  /// A meeting (imported or your own) that starts while a task is running
+  /// pauses it at the meeting's start, even if the app wasn't open then,
+  /// so meeting time is never counted as work. When the meeting is over
+  /// (and any meeting straight after it), the task starts again from the
+  /// meeting's end. Starting other work in between cancels that.
+  void _pauseForMeetings() {
+    if (!isViewingToday) return;
+    final now = DateTime.now();
+    final day = _viewedDate;
+    final meetings = [
+      for (final t in [..._eventTasks, ..._tasks])
+        if (t.type == TaskType.hard &&
+            t.startTime != null &&
+            t.status != TaskStatus.complete &&
+            t.status != TaskStatus.cancelled)
+          (
+            id: t.id,
+            title: t.title,
+            start: DateTime(
+              day.year,
+              day.month,
+              day.day,
+              t.startTime!.hour,
+              t.startTime!.minute,
+            ),
+            end: DateTime(
+              day.year,
+              day.month,
+              day.day,
+              t.startTime!.hour,
+              t.startTime!.minute + t.durationMinutes,
+            ),
+          ),
+    ]..sort((a, b) => a.start.compareTo(b.start));
+    if (meetings.isEmpty) return;
+
+    Task? before;
+    String? title;
+    final ids = <String>{};
+    // Each pass pauses or resumes once; a day has few meetings.
+    for (var pass = 0; pass < 100; pass++) {
+      final running = _tasks.indexWhere(
+        (t) =>
+            t.status == TaskStatus.inProgress &&
+            t.type != TaskType.hard &&
+            t.startedAt != null,
+      );
+      if (running != -1) {
+        final t = _tasks[running];
+        final skip = _workThrough[t.id] ?? const {};
+        final meeting = meetings
+            .where(
+              (m) =>
+                  m.start.isAfter(t.startedAt!) &&
+                  !m.start.isAfter(now) &&
+                  !skip.contains(m.id),
+            )
+            .firstOrNull;
+        if (meeting == null) break;
+        before ??= t;
+        title = meeting.title;
+        ids.add(meeting.id);
+        _tasks[running] = _paused(
+          t,
+          meeting.start,
+        ).copyWith(resumeAt: () => meeting.end);
+        continue;
+      }
+      final waiting = _tasks.indexWhere(
+        (t) => t.resumeAt != null && t.status == TaskStatus.notStarted,
+      );
+      if (waiting == -1) break;
+      final t = _tasks[waiting];
+      final at = t.resumeAt!;
+      // Another meeting under way by then: wait for that one too.
+      final next = meetings
+          .where((m) => !m.start.isAfter(at) && m.end.isAfter(at))
+          .firstOrNull;
+      if (next != null) {
+        before ??= t;
+        title = next.title;
+        ids.add(next.id);
+        _tasks[waiting] = t.copyWith(resumeAt: () => next.end);
+        continue;
+      }
+      if (at.isAfter(now)) break;
+      before ??= t;
+      // Not after the workday: it stays paused.
+      if (at.hour * 60 + at.minute >= _workdayEndHour * 60 ||
+          _dateOnly(at) != day) {
+        _tasks[waiting] = t.copyWith(resumeAt: () => null);
+        continue;
+      }
+      _tasks[waiting] = t.copyWith(
+        status: TaskStatus.inProgress,
+        startedAt: () => at,
+        resumeAt: () => null,
+      );
+    }
+    if (before == null) return;
+
+    final after = _tasks.firstWhere((t) => t.id == before!.id);
+    _meetingPause = MeetingPause(
+      before: before,
+      after: after,
+      meetingTitle: title,
+      meetingIds: ids,
+    );
+    _ensureOverrunMonitor();
+    _scheduleSave();
   }
 
   /// A replan caused by the clock (minute tick, overrun check) rather than
@@ -1038,8 +1189,7 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
     for (final t in [..._eventTasks, ..._tasks]) {
       if (_heldStarts.containsKey(t.id)) continue;
       // Finished items free their time (see Scheduler).
-      if (t.status == TaskStatus.complete ||
-          t.status == TaskStatus.cancelled) {
+      if (t.status == TaskStatus.complete || t.status == TaskStatus.cancelled) {
         continue;
       }
       if (t.status == TaskStatus.inProgress && t.startedAt != null) {
@@ -1146,6 +1296,7 @@ class DayPlannerModel extends ChangeNotifier with WidgetsBindingObserver {
   /// overrunning its estimate is reflected in downstream placement,
   /// surfacing a suggestion if the recompute displaces other tasks.
   void _checkOverrun() {
+    _pauseForMeetings();
     _replanForTime();
     notifyListeners();
   }

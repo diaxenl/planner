@@ -181,6 +181,15 @@ Owner feedback (2026-11-16): finishing a task doesn't pull other work into the f
 - [x] Tests (`phase22_test.dart`); Phase 17 breathing-room tests removed
 - [ ] Validation: analyze clean, tests green (same pre-existing review test failure); **remaining: check on a device** (phone disconnected)
 
+## Phase 23 — Fill Every Gap Cleanly, Meetings Pause Work, No Outcome Cap
+From persona round 5 (2026-11-21, `tool/PERSONA_ROUND5_REPORT.md`). Owner (2026-11-23): small gaps must be filled with workable tasks ("if it breaks things up funny the issue is how we break it up"); auto-pause at meetings, and auto-resume after; no cap on Outcomes (individual preference); an Outcome that doesn't fully fit gets part of the time. "Before/by a meeting" parked.
+- [x] Fill: "Do next" work at the earliest free time; the most important long work starts in the first free time after that; the rest admitted in order while it fits (smaller work further down still gets a chance); gaps under 30m get the combination of short tasks that fills them most; Outcomes and long work whole in the earliest gap that holds them, else split — first session as early as possible, the rest in the longest gaps; leftover short tasks into the tightest gap they fit. Work of 30m or less is never split; no split session under 15m
+- [x] An Outcome that doesn't fully fit is planned in part ("1h today · 40m doesn't fit"); the rest is listed under Doesn't fit and counted in the load bar
+- [x] A meeting (imported or your own) that starts while a task runs pauses it at the meeting's start, even if the app was closed; it resumes from the meeting's end (after back-to-back meetings too) unless other work was started or the workday is over. Toast with Undo (Undo on a pause works through the meeting)
+- [x] No Outcome cap: PRD updated, stale comment removed
+- [x] Tests (`phase23_test.dart`); Phase 17/22 split tests updated to the new rules
+- [ ] Validation: analyze clean, tests green (same pre-existing review test failure); **on device**
+
 ---
 
 **Current status:** Engine (Phases 1–9) complete. Phases 10–13, 15, 16 and 17 complete (17 awaiting a live persona re-run). Phase 14 code complete with `device_calendar` 4.3.3 (owner-approved 2026-11-05); **remaining: Android SDK install (+ Windows Developer Mode for plugin builds) and a real-device check with Google, Microsoft and iCloud accounts.**

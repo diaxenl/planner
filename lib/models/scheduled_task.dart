@@ -8,7 +8,7 @@ import 'task.dart';
 /// equals [Task.startTime]. For [TaskType.floating] tasks, it is assigned
 /// by the scheduling engine.
 ///
-/// An Outcome that doesn't fit one free gap is split into sessions: one
+/// Floating work that doesn't fit one free gap is split into sessions: one
 /// [ScheduledTask] per session, all sharing the same [task], numbered
 /// [part] of [parts].
 class ScheduledTask {

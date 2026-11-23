@@ -7,7 +7,11 @@ import 'task.dart';
 /// (with computed start times) and any floating tasks that could not
 /// fit within the day window.
 class DaySchedule {
-  const DaySchedule({required this.committed, required this.overflow});
+  const DaySchedule({
+    required this.committed,
+    required this.overflow,
+    this.unplanned = const {},
+  });
 
   /// All placed tasks with their computed start time.
   /// Includes hard, pinned, and successfully-scheduled floating tasks.
@@ -15,6 +19,10 @@ class DaySchedule {
 
   /// Floating tasks that could not be placed in any available gap.
   final List<Task> overflow;
+
+  /// Outcomes planned in part, because the day had less free time left
+  /// than they need: minutes that didn't fit, by task id.
+  final Map<String, int> unplanned;
 
   /// Empty schedule with no tasks.
   static const empty = DaySchedule(committed: [], overflow: []);

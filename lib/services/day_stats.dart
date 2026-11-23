@@ -75,13 +75,15 @@ class DayStats {
 
     final busy = meetings + outcomes + other;
     final window = dayEnd - windowStart;
-    final overflow = schedule.overflow
-        .where(
-          (t) =>
-              t.status != TaskStatus.complete &&
-              t.status != TaskStatus.cancelled,
-        )
-        .fold<int>(0, (sum, t) => sum + t.remainingMinutes);
+    final overflow =
+        schedule.overflow
+            .where(
+              (t) =>
+                  t.status != TaskStatus.complete &&
+                  t.status != TaskStatus.cancelled,
+            )
+            .fold<int>(0, (sum, t) => sum + t.remainingMinutes) +
+        schedule.unplanned.values.fold<int>(0, (sum, m) => sum + m);
 
     return LoadBreakdown(
       meetings: meetings,

@@ -78,7 +78,7 @@ void main() {
   });
 
   group('Phase 22 — priority', () {
-    test('High, then Normal, then Low; shorter first within each', () {
+    test('High, then Normal, then Low; added first wins within each', () {
       final low = _work('Low', 15, priority: TaskPriority.low);
       final normal = _work('Normal', 30);
       final highLong = _work('High long', 60, priority: TaskPriority.high);
@@ -88,8 +88,8 @@ void main() {
         dayStartHour: 8,
         dayEndHour: 18,
       );
-      expect(_start(s, highShort), 8 * 60);
-      expect(_start(s, highLong), 8 * 60 + 30);
+      expect(_start(s, highLong), 8 * 60);
+      expect(_start(s, highShort), 9 * 60);
       expect(_start(s, normal), 9 * 60 + 30);
       expect(_start(s, low), 10 * 60);
     });
@@ -106,7 +106,8 @@ void main() {
       expect(_start(s, high), 8 * 60 + 30);
     });
 
-    test('a short gap gets the most important work that fits', () {
+    test('the most important work takes the first free time, split '
+        'around a set-time item', () {
       final high = _work('High', 60, priority: TaskPriority.high);
       final low = _work('Low', 20, priority: TaskPriority.low);
       final s = Scheduler.schedule(
@@ -114,8 +115,10 @@ void main() {
         dayStartHour: 8,
         dayEndHour: 18,
       );
-      expect(_start(s, low), 8 * 60);
-      expect(_start(s, high), 9 * 60);
+      final highParts = s.committed.where((st) => st.task.id == high.id);
+      expect([for (final p in highParts) p.startMinutes], [8 * 60, 9 * 60]);
+      expect([for (final p in highParts) p.durationMinutes], [30, 30]);
+      expect(_start(s, low), 9 * 60 + 30);
     });
 
     test('priority round-trips; missing reads as Normal', () {

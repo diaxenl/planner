@@ -32,9 +32,17 @@ class AppConstants {
   /// How often to re-check for task overruns while a task is in progress.
   static const Duration overrunCheckInterval = Duration(seconds: 30);
 
-  /// Shortest session an Outcome is split into when it doesn't fit one
+  /// Shortest session long work is split into when it doesn't fit one
   /// free gap.
-  static const int minSessionMinutes = 30;
+  static const int minSessionMinutes = 15;
+
+  /// Work this long or shorter is never split: it fits a gap whole or
+  /// waits for one.
+  static const int noSplitMaxMinutes = 30;
+
+  /// Free gaps shorter than this are filled first, with the combination
+  /// of short tasks that fills them most.
+  static const int smallGapMinutes = 30;
 
   /// How long before a meeting the Now card warns that the running task
   /// is about to run into it.

@@ -11,7 +11,7 @@ import 'schedule_timeline.dart';
 
 /// The day on a timeline ([ScheduleTimeline]), followed by anything
 /// that doesn't fit and anything already finished off the plan. A split
-/// Outcome has one block per session.
+/// item has one block per session.
 class AgendaList extends StatelessWidget {
   const AgendaList({
     super.key,
@@ -83,7 +83,7 @@ class AgendaList extends StatelessWidget {
           isToday: isToday,
           onTap: onTap,
         ),
-        if (schedule.overflow.isNotEmpty) ...[
+        if (schedule.overflow.isNotEmpty || schedule.unplanned.isNotEmpty) ...[
           const SizedBox(height: 24),
           Text("DOESN'T FIT", style: text.labelSmall),
           const SizedBox(height: 8),
@@ -95,6 +95,17 @@ class AgendaList extends StatelessWidget {
               isCurrent: false,
               onTap: () => onTap(t),
             ),
+          // Outcomes planned in part: the rest that doesn't fit.
+          for (final st in schedule.committed)
+            if (schedule.unplanned.containsKey(st.task.id) &&
+                st.part == st.parts)
+              _Row(
+                time: 'Rest',
+                task: st.task,
+                minutes: schedule.unplanned[st.task.id]!,
+                isCurrent: false,
+                onTap: () => onTap(st.task),
+              ),
         ],
         if (finishedOffPlan.isNotEmpty) ...[
           const SizedBox(height: 24),

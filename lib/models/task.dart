@@ -64,6 +64,7 @@ class Task {
     this.doNextAt,
     this.recurringId,
     this.priority = TaskPriority.normal,
+    this.resumeAt,
   }) : id = id ?? _generateId();
 
   /// Unique identifier — 16-character hex string.
@@ -130,6 +131,10 @@ class Task {
   /// Fill order among other Anytime work: High, then Normal, then Low.
   final TaskPriority priority;
 
+  /// Set when a meeting paused this task: when to start it again (the
+  /// meeting's end). Cleared once it resumes or the user acts on it.
+  final DateTime? resumeAt;
+
   /// Minutes still to plan: the estimate minus minutes already tracked on
   /// earlier, paused runs (never less than 5).
   int get remainingMinutes {
@@ -156,6 +161,7 @@ class Task {
     DateTime? Function()? doNextAt,
     String? Function()? recurringId,
     TaskPriority? priority,
+    DateTime? Function()? resumeAt,
   }) {
     return Task(
       id: id ?? this.id,
@@ -179,6 +185,7 @@ class Task {
       doNextAt: doNextAt != null ? doNextAt() : this.doNextAt,
       recurringId: recurringId != null ? recurringId() : this.recurringId,
       priority: priority ?? this.priority,
+      resumeAt: resumeAt != null ? resumeAt() : this.resumeAt,
     );
   }
 
@@ -245,6 +252,7 @@ class Task {
       'doNextAt': doNextAt?.toIso8601String(),
       'recurringId': recurringId,
       'priority': priority.name,
+      'resumeAt': resumeAt?.toIso8601String(),
     };
   }
 
@@ -292,10 +300,14 @@ class Task {
           ? null
           : DateTime.parse(json['doNextAt'] as String);
       final recurringId = json['recurringId'] as String?;
-      final priority = TaskPriority.values
+      final priority =
+          TaskPriority.values
               .where((p) => p.name == json['priority'])
               .firstOrNull ??
           TaskPriority.normal;
+      final resumeAt = json['resumeAt'] == null
+          ? null
+          : DateTime.parse(json['resumeAt'] as String);
 
       return Task(
         id: id,
@@ -315,6 +327,7 @@ class Task {
         doNextAt: doNextAt,
         recurringId: recurringId,
         priority: priority,
+        resumeAt: resumeAt,
       );
     } catch (_) {
       return null;
