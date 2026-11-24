@@ -9,6 +9,7 @@ class ParsedCapture {
     this.startTime,
     this.date,
     this.isOutcome = false,
+    this.isMeeting = false,
   });
 
   final String title;
@@ -18,6 +19,10 @@ class ParsedCapture {
   /// The day named in the text ("today", "tomorrow", "Friday"), or `null`.
   final DateTime? date;
   final bool isOutcome;
+
+  /// A time was read and the title opens with a meeting word (see
+  /// [CaptureParser]).
+  final bool isMeeting;
 }
 
 /// Pure, stateless parser for capture-bar shorthand, e.g.
@@ -25,7 +30,8 @@ class ParsedCapture {
 /// the coming Friday, Outcome.
 ///
 /// Recognized whole-word tokens (first of each kind wins, case-insensitive):
-/// - Duration, anywhere: `30m`, `30min`, `1h`, `1h30m`, `1.5h`
+/// - Duration, anywhere: `30m`, `30min`, `1h`, `1h30m`, `1.5h`, and a
+///   number then a unit word (`45 min`, `2 hours`)
 /// - Time: `3pm`, `3:30pm`, `15:00`, `3:30`; and a bare hour (`3`) only
 ///   right after `at`. A time counts only right after `at`/`@`, or in the
 ///   run of shorthand that ends the text — so "Email team re 2pm meeting"
@@ -34,6 +40,9 @@ class ParsedCapture {
 /// - Day: `today`, `tomorrow`, or a weekday name (`Friday`, the next one,
 ///   today included), only right after `on` or in the closing run.
 /// - Outcome: `*` as its own word, or at the very start or end of the text.
+/// - Meeting: a time was read and the title opens with `meeting`, `mtg`,
+///   `call`, `1:1`, `1on1`, `1-on-1` or `1 on 1` ("Meeting - AI tool
+///   9:30"). "Prep for meeting at 2pm" stays a set-time item.
 /// The `at` / `on` before a time or day is dropped. Everything else, in
 /// order, is the title. Never validates ranges — that is the model's job.
 class CaptureParser {
@@ -86,6 +95,15 @@ class CaptureParser {
       words[words.length - 1] = words.last.replaceFirst(RegExp(r'\*+$'), '');
     }
     words.removeWhere((w) => w.isEmpty);
+
+    // ── "45 min", "1.5 hours": a number and a unit word read as one ──
+    for (var i = words.length - 2; i >= 0; i--) {
+      final unit = _unitWords[_bare(words[i + 1].toLowerCase())];
+      if (unit != null && RegExp(r'^\d{1,3}(\.\d+)?$').hasMatch(words[i])) {
+        words[i] = '${words[i]}$unit';
+        words.removeAt(i + 1);
+      }
+    }
 
     final lower = [for (final w in words) _bare(w.toLowerCase())];
     final day = today ?? DateTime.now();
@@ -156,8 +174,44 @@ class CaptureParser {
       startTime: time,
       date: date,
       isOutcome: isOutcome,
+      isMeeting: time != null && _opensWithMeetingWord(title),
     );
   }
+
+  static const _meetingWords = {
+    'meeting',
+    'mtg',
+    'call',
+    '1:1',
+    '1on1',
+    '1-on-1',
+  };
+
+  /// Whether [title] opens with one of [_meetingWords] or "1 on 1".
+  static bool _opensWithMeetingWord(List<String> title) {
+    if (title.isEmpty) return false;
+    String word(int i) =>
+        title[i].toLowerCase().replaceFirst(RegExp(r'[:,.;!?\-–—]+$'), '');
+    if (_meetingWords.contains(word(0))) return true;
+    return title.length >= 3 &&
+        word(0) == '1' &&
+        word(1) == 'on' &&
+        word(2) == '1';
+  }
+
+  /// Unit words after a number ("45 min") and the suffix they stand for.
+  static const _unitWords = {
+    'm': 'm',
+    'min': 'm',
+    'mins': 'm',
+    'minute': 'm',
+    'minutes': 'm',
+    'h': 'h',
+    'hr': 'h',
+    'hrs': 'h',
+    'hour': 'h',
+    'hours': 'h',
+  };
 
   static bool _isAt(String w) => w == 'at' || w == '@';
 

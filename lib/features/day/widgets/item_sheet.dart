@@ -50,6 +50,9 @@ class ItemSheet extends StatefulWidget {
     ValueChanged<Task>? onDeleted,
     void Function(ItemAction action, Task task)? onAction,
   }) {
+    // Let go of the capture field first, so closing the sheet doesn't
+    // hand focus back to it and bring the keyboard up over the schedule.
+    FocusManager.instance.primaryFocus?.unfocus();
     return showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,

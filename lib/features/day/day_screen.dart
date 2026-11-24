@@ -23,16 +23,19 @@ import 'widgets/item_sheet.dart';
 import 'widgets/load_bar.dart';
 import 'widgets/missed_list.dart';
 import 'widgets/now_card.dart';
+import 'widgets/now_drawer.dart';
 import 'widgets/outcomes_list.dart';
 import 'widgets/start_prompt.dart';
 import 'widgets/suggestion_banner.dart';
 
 /// Home screen — one day, built around its Outcomes.
 ///
-/// Top to bottom: header, load bar, suggestion banner, Now card (today
-/// only), Outcomes, Schedule; capture bar pinned at the bottom. A day
-/// (today or later) with nothing of your own on it shows only the
-/// [StartPrompt] and any meetings, so there is one obvious first step.
+/// Top to bottom: header, load bar, suggestion banner, missed items,
+/// Schedule; pinned at the bottom, the [NowDrawer] (Now bar, opening to
+/// the Now card and the day's Outcomes) over the capture bar. Holding
+/// down on empty schedule adds an Outcome at that time. A day (today or
+/// later) with nothing of your own on it shows only the [StartPrompt]
+/// and any meetings, so there is one obvious first step.
 class DayScreen extends StatefulWidget {
   const DayScreen({super.key});
 
@@ -164,9 +167,23 @@ class _DayScreenState extends State<DayScreen> {
             padding: EdgeInsets.only(
               bottom: MediaQuery.of(context).viewInsets.bottom,
             ),
-            child: CaptureBar(
-              onSubmit: (raw) => _capture(model, raw),
-              onSomethingCameUp: isToday ? () => _somethingCameUp(model) : null,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (!isEmptyDay)
+                  _nowDrawer(
+                    model,
+                    dayLabel: dayLabel,
+                    isToday: isToday,
+                    current: current,
+                  ),
+                CaptureBar(
+                  onSubmit: (raw) => _capture(model, raw),
+                  onSomethingCameUp: isToday
+                      ? () => _somethingCameUp(model)
+                      : null,
+                ),
+              ],
             ),
           ),
         ),
@@ -205,60 +222,102 @@ class _DayScreenState extends State<DayScreen> {
         fitsToday: (t) => model.fitsLaterToday(t.id),
       ),
     ],
-    if (isToday) ...[
-      const SizedBox(height: 20),
-      NowCard(
-        item: current,
-        hasAnyTasks: model.tasks.isNotEmpty,
-        onStart: () => _act(ItemAction.start, current!.task),
-        onDone: () => _act(ItemAction.done, current!.task),
-        onCancel: () => _act(ItemAction.cancel, current!.task),
-        onTap: () => _edit(model, current!.task),
-        onReview: () => ReviewScreen.open(context),
-        running: model.runningBehindCurrent,
-        startingSoon: model.fixedItemStartingSoon,
-        onPause: () {
-          final running = model.runningBehindCurrent;
-          if (running != null) _pause(model, running.task);
-        },
-        onPauseCurrent: () {
-          if (current != null) _pause(model, current.task);
-        },
-      ),
-    ],
-    const SizedBox(height: 28),
-    OutcomesList(
-      tasks: model.tasks.where((t) => t.isOutcome).toList(),
-      schedule: model.schedule,
-      dayLabel: dayLabel.startsWith('on ') ? 'this day' : dayLabel,
-      onDone: (t) => _act(ItemAction.done, t),
-      onTap: (t) => _edit(model, t),
-      onReorder: model.reorderOutcomes,
-      onAdd: () => ItemSheet.show(
-        context,
-        model: model,
-        draft: Task(
-          title: '',
-          durationMinutes: 60,
-          type: TaskType.floating,
-          isOutcome: true,
-          date: model.viewedDate,
-        ),
-      ),
-    ),
     const SizedBox(height: 28),
     _agenda(model, current),
   ];
+
+  /// The Now bar over the capture bar: opens into the full Now card
+  /// (today) and the day's Outcomes, which live only here.
+  Widget _nowDrawer(
+    DayPlannerModel model, {
+    required String dayLabel,
+    required bool isToday,
+    required ScheduledTask? current,
+  }) {
+    final outcomes = model.tasks.where((t) => t.isOutcome).toList();
+    final counted = outcomes.where((t) => t.status != TaskStatus.cancelled);
+    return NowDrawer(
+      isToday: isToday,
+      item: current,
+      outcomesDone: counted
+          .where((t) => t.status == TaskStatus.complete)
+          .length,
+      outcomesTotal: counted.length,
+      warning:
+          model.fixedItemStartingSoon != null ||
+          model.runningBehindCurrent != null,
+      onStart: () => _act(ItemAction.start, current!.task),
+      onDone: () => _act(ItemAction.done, current!.task),
+      now: !isToday
+          ? null
+          : NowCard(
+              item: current,
+              hasAnyTasks: model.tasks.isNotEmpty,
+              onStart: () => _act(ItemAction.start, current!.task),
+              onDone: () => _act(ItemAction.done, current!.task),
+              onCancel: () => _act(ItemAction.cancel, current!.task),
+              onTap: () => _edit(model, current!.task),
+              onReview: () => ReviewScreen.open(context),
+              running: model.runningBehindCurrent,
+              startingSoon: model.fixedItemStartingSoon,
+              onPause: () {
+                final running = model.runningBehindCurrent;
+                if (running != null) _pause(model, running.task);
+              },
+              onPauseCurrent: () {
+                if (current != null) _pause(model, current.task);
+              },
+            ),
+      outcomes: OutcomesList(
+        tasks: outcomes,
+        schedule: model.schedule,
+        dayLabel: dayLabel.startsWith('on ') ? 'this day' : dayLabel,
+        onDone: (t) => _act(ItemAction.done, t),
+        onTap: (t) => _edit(model, t),
+        onReorder: model.reorderOutcomes,
+        onAdd: () => ItemSheet.show(
+          context,
+          model: model,
+          draft: Task(
+            title: '',
+            durationMinutes: 60,
+            type: TaskType.floating,
+            isOutcome: true,
+            date: model.viewedDate,
+          ),
+        ),
+      ),
+    );
+  }
 
   Widget _agenda(DayPlannerModel model, ScheduledTask? current) => AgendaList(
     schedule: model.schedule,
     tasks: model.tasks,
     current: current,
     onTap: (t) => _edit(model, t),
+    onLongPressAt: (minutes) => _addOutcomeAt(model, minutes),
     dayStartHour: model.workdayStartHour,
     dayEndHour: model.workdayEndHour,
     isToday: model.isViewingToday,
   );
+
+  /// Holding down on the schedule: a new set-time Outcome (1h) at that
+  /// time, opened in the item sheet to name it.
+  void _addOutcomeAt(DayPlannerModel model, int minutes) {
+    HapticFeedback.mediumImpact();
+    ItemSheet.show(
+      context,
+      model: model,
+      draft: Task(
+        title: '',
+        durationMinutes: 60,
+        type: TaskType.pinned,
+        startTime: TimeOfDay(hour: minutes ~/ 60, minute: minutes % 60),
+        isOutcome: true,
+        date: model.viewedDate,
+      ),
+    );
+  }
 
   /// Parses capture shorthand, reading day words from today and times
   /// without am/pm against the workday.
@@ -271,7 +330,8 @@ class _DayScreenState extends State<DayScreen> {
       );
 
   /// Builds a task from capture shorthand: parsed duration (default 30m,
-  /// or 1h for an Outcome), a parsed time makes it Set-time, `*` or
+  /// or 1h for an Outcome), a parsed time makes it Set-time (a Meeting if
+  /// the title opens with a meeting word), `*` or
   /// [asOutcome] makes it an Outcome. The day named in the text is
   /// ignored here (see [_capture]).
   Task _fromCapture(
@@ -284,7 +344,11 @@ class _DayScreenState extends State<DayScreen> {
     return Task(
       title: p.title.isEmpty ? raw.trim() : p.title,
       durationMinutes: p.durationMinutes ?? (asOutcome ? 60 : 30),
-      type: p.startTime != null ? TaskType.pinned : TaskType.floating,
+      type: p.startTime == null
+          ? TaskType.floating
+          : p.isMeeting
+          ? TaskType.hard
+          : TaskType.pinned,
       startTime: p.startTime,
       isOutcome: asOutcome || p.isOutcome,
       isInterruption: interruption,
@@ -386,6 +450,7 @@ class _DayScreenState extends State<DayScreen> {
 
   static String _describe(Task t) {
     final parts = <String>[
+      if (t.type == TaskType.hard) 'Meeting',
       AppUtils.formatDuration(t.durationMinutes),
       if (t.startTime != null)
         'at ${AppUtils.formatClock(t.startTime!.hour * 60 + t.startTime!.minute)}',

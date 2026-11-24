@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -118,54 +119,16 @@ class _NowCardState extends State<NowCard> {
     final task = item.task;
     final now = DateTime.now();
     final nowSeconds = now.hour * 3600 + now.minute * 60 + now.second;
-    final startSeconds = item.startMinutes * 60;
-    final endSeconds = item.endMinutes * 60;
     final isMeeting = task.type == TaskType.hard;
     final inProgress = task.status == TaskStatus.inProgress;
-
-    var elapsedOver = 0;
-    String label;
-    String timer;
-    String detail;
-    var timerColor = colors.textPrimary;
-
-    if (inProgress) {
-      // Includes minutes tracked on earlier, paused runs.
-      final elapsed =
-          now.difference(task.startedAt!) +
-          Duration(minutes: task.actualDurationMinutes ?? 0);
-      final over = elapsed.inMinutes - task.durationMinutes;
-      elapsedOver = over;
-      label = 'NOW';
-      timer = AppUtils.formatTimer(elapsed);
-      if (over > 0) {
-        timerColor = colors.accent;
-        detail =
-            '+${AppUtils.formatDuration(over)} over your '
-            '${AppUtils.formatDuration(task.durationMinutes)} estimate';
-      } else {
-        detail = 'of ${AppUtils.formatDuration(task.durationMinutes)}';
-      }
-    } else if (nowSeconds < startSeconds) {
-      label = isMeeting ? 'NEXT MEETING' : 'UP NEXT';
-      timer = AppUtils.formatTimer(
-        Duration(seconds: startSeconds - nowSeconds),
-      );
-      detail =
-          'until ${AppUtils.formatClock(item.startMinutes)}'
-          ' · ${AppUtils.formatDuration(item.durationMinutes)}';
-    } else if (isMeeting) {
-      label = 'IN A MEETING';
-      timer = AppUtils.formatTimer(
-        Duration(seconds: (endSeconds - nowSeconds).clamp(0, endSeconds)),
-      );
-      detail = 'left · until ${AppUtils.formatClock(item.endMinutes)}';
-    } else {
-      // Planned for now but not started: nothing is ticking yet.
-      label = 'READY';
-      timer = AppUtils.formatDuration(item.durationMinutes);
-      detail = 'planned now · tap Start when you begin';
-    }
+    final readout = NowReadout.of(item, now);
+    final elapsedOver = readout.overMinutes;
+    final label = readout.label;
+    final timer = readout.timer;
+    final detail = readout.detail;
+    final timerColor = readout.overMinutes > 0
+        ? colors.accent
+        : colors.textPrimary;
 
     return GestureDetector(
       onTap: widget.onTap,
@@ -203,18 +166,19 @@ class _NowCardState extends State<NowCard> {
               overflow: TextOverflow.ellipsis,
             ),
             const SizedBox(height: 16),
-            Text(timer, style: text.displayLarge?.copyWith(color: timerColor)),
+            Text(timer, style: text.displaySmall?.copyWith(color: timerColor)),
             const SizedBox(height: 4),
             Text(detail, style: text.bodyMedium),
+            if (readout.progress != null) ...[
+              const SizedBox(height: 12),
+              NowProgress(value: readout.progress!),
+            ],
             if (inProgress &&
                 elapsedOver > 0 &&
                 widget.startingSoon == null) ...[
               const SizedBox(height: 12),
-              _Warning(
-                text: 'Past your estimate — still on it?',
-                actionLabel: 'Pause',
-                onAction: widget.onPauseCurrent,
-              ),
+              // Pause is in the buttons below.
+              const _Warning(text: 'Past your estimate — still on it?'),
             ],
             if (widget.startingSoon != null && inProgress) ...[
               const SizedBox(height: 12),
@@ -250,13 +214,19 @@ class _NowCardState extends State<NowCard> {
                         child: const Text('Done'),
                       ),
                     ),
-                  ] else
+                  ] else ...[
                     Expanded(
                       child: FilledButton(
                         onPressed: widget.onDone,
                         child: const Text('Done'),
                       ),
                     ),
+                    const SizedBox(width: 8),
+                    OutlinedButton(
+                      onPressed: widget.onPauseCurrent,
+                      child: const Text('Pause'),
+                    ),
+                  ],
                   const SizedBox(width: 4),
                   TextButton(
                     onPressed: widget.onCancel,
@@ -267,6 +237,123 @@ class _NowCardState extends State<NowCard> {
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// What the Now card and the Now bar show for one item at a moment:
+/// shared so the two always agree.
+class NowReadout {
+  const NowReadout({
+    required this.label,
+    required this.timer,
+    required this.detail,
+    required this.short,
+    this.overMinutes = 0,
+    this.progress,
+  });
+
+  /// - In progress: elapsed time (including earlier, paused runs) against
+  ///   the estimate, and when it's planned to end.
+  /// - Not started, ahead: countdown to its start.
+  /// - Meeting under way: time left.
+  /// - Planned for now but not started: its length; nothing ticks yet.
+  factory NowReadout.of(ScheduledTask item, DateTime now) {
+    final task = item.task;
+    final nowSeconds = now.hour * 3600 + now.minute * 60 + now.second;
+    final startSeconds = item.startMinutes * 60;
+    final endSeconds = item.endMinutes * 60;
+    final isMeeting = task.type == TaskType.hard;
+    final estimate = AppUtils.formatDuration(task.durationMinutes);
+
+    if (task.status == TaskStatus.inProgress) {
+      final elapsed =
+          now.difference(task.startedAt!) +
+          Duration(minutes: task.actualDurationMinutes ?? 0);
+      final over = elapsed.inMinutes - task.durationMinutes;
+      return NowReadout(
+        label: 'NOW',
+        timer: AppUtils.formatTimer(elapsed),
+        detail: over > 0
+            ? '+${AppUtils.formatDuration(over)} over your $estimate estimate'
+            : 'of $estimate · until ${AppUtils.formatClock(item.endMinutes)}',
+        short: over > 0
+            ? '+${AppUtils.formatDuration(over)} over'
+            : 'of $estimate',
+        overMinutes: math.max(0, over),
+        progress: task.durationMinutes <= 0
+            ? 1
+            : (elapsed.inSeconds / (task.durationMinutes * 60)).clamp(0.0, 1.0),
+      );
+    }
+    if (nowSeconds < startSeconds) {
+      return NowReadout(
+        label: isMeeting ? 'NEXT MEETING' : 'UP NEXT',
+        timer: AppUtils.formatTimer(
+          Duration(seconds: startSeconds - nowSeconds),
+        ),
+        detail:
+            'until ${AppUtils.formatClock(item.startMinutes)}'
+            ' · ${AppUtils.formatDuration(item.durationMinutes)}',
+        short: 'at ${AppUtils.formatClock(item.startMinutes)}',
+      );
+    }
+    if (isMeeting) {
+      final length = math.max(1, endSeconds - startSeconds);
+      return NowReadout(
+        label: 'IN A MEETING',
+        timer: AppUtils.formatTimer(
+          Duration(seconds: (endSeconds - nowSeconds).clamp(0, endSeconds)),
+        ),
+        detail: 'left · until ${AppUtils.formatClock(item.endMinutes)}',
+        short: 'left',
+        progress: ((nowSeconds - startSeconds) / length).clamp(0.0, 1.0),
+      );
+    }
+    return NowReadout(
+      label: 'READY',
+      timer: AppUtils.formatDuration(item.durationMinutes),
+      detail: 'planned now · tap Start when you begin',
+      short: 'planned now',
+    );
+  }
+
+  final String label;
+
+  /// The big number: elapsed, countdown, time left, or the length.
+  final String timer;
+
+  /// The line under the timer on the card.
+  final String detail;
+
+  /// A few words for the Now bar, beside the timer.
+  final String short;
+
+  /// Minutes past the estimate, for a running task (0 if not over).
+  final int overMinutes;
+
+  /// How far through (0–1), for a running task or a meeting under way.
+  final double? progress;
+}
+
+/// A thin accent line showing how far through the current item is.
+class NowProgress extends StatelessWidget {
+  const NowProgress({super.key, required this.value, this.height = 4});
+
+  final double value;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = HyperColors.of(context);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(height / 2),
+      child: LinearProgressIndicator(
+        value: value,
+        minHeight: height,
+        color: colors.accent,
+        backgroundColor: colors.hairline,
       ),
     );
   }

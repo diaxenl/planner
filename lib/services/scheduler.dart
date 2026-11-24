@@ -15,8 +15,9 @@ import '../models/task.dart';
 ///
 /// "Do next" work takes the earliest free time. The rest fills the day so
 /// no free time is left that some task could use: short tasks fill the
-/// short gaps, long work gets the long gaps, short tasks are never split
-/// and nothing is split into sessions under
+/// short gaps, Outcomes take the earliest free time (split over gaps if
+/// need be), other long work gets the long gaps, short tasks are never
+/// split and nothing is split into sessions under
 /// [AppConstants.minSessionMinutes] (see step 5). An Outcome that doesn't
 /// fully fit is planned in part. A set-time item that was finished early
 /// frees the rest of its slot, and one marked "Won't do" frees all of it.
@@ -225,9 +226,10 @@ class Scheduler {
     //  c. Gaps shorter than [AppConstants.smallGapMinutes] get the
     //     combination of short tasks that fills them most (except the
     //     first free time when the most important work is long).
-    //  d. Outcomes and long work, in order: whole in the earliest gap that
-    //     holds it; else split, first session as early as possible, the
-    //     rest in the longest gaps.
+    //  d. Outcomes and long work, in order. A long Outcome takes the
+    //     earliest free time, split over the gaps in order. Other long
+    //     work: whole in the earliest gap that holds it; else split, first
+    //     session as early as possible, the rest in the longest gaps.
     //  e. Short tasks left over: the tightest gap they fit.
     // Short tasks (up to [AppConstants.noSplitMaxMinutes]) are never split.
     final overflow = <Task>[];
@@ -331,6 +333,13 @@ class Scheduler {
         if (take > 0) place(work, kept, take);
         if (take == work.minutes) continue;
         work = _Work(work.task, work.minutes - take);
+      }
+      // An Outcome takes the earliest free time, split over the gaps in
+      // order, so no window before it is left unused.
+      if (work.task.isOutcome && !isShort(work)) {
+        final left = _placeEarliest(gaps, work, place);
+        if (left > 0) notFitting(work, left);
+        continue;
       }
       final whole = gaps.where((g) => g.length >= work.minutes).firstOrNull;
       if (whole != null) {

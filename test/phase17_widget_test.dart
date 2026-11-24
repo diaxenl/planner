@@ -44,7 +44,13 @@ void main() {
 
     await tester.pumpWidget(_app(model, settings));
     await tester.pump();
+    // Outcomes live in the Now drawer, closed until opened.
+    expect(find.byIcon(Icons.drag_indicator), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('now-drawer-open')));
+    await tester.pumpAndSettle();
     expect(find.byIcon(Icons.drag_indicator), findsNWidgets(2));
+    await tester.tap(find.byKey(const ValueKey('now-drawer-close')));
+    await tester.pumpAndSettle();
 
     await tester.ensureVisible(find.text('Review PRs'));
     await tester.pumpAndSettle();

@@ -22,9 +22,13 @@ class AgendaList extends StatelessWidget {
     required this.dayStartHour,
     required this.dayEndHour,
     required this.isToday,
+    this.onLongPressAt,
   });
 
   final DaySchedule schedule;
+
+  /// Holding down on empty timeline (see [ScheduleTimeline]).
+  final ValueChanged<int>? onLongPressAt;
 
   /// The workday, for the timeline's range and free time.
   final int dayStartHour;
@@ -82,6 +86,7 @@ class AgendaList extends StatelessWidget {
           dayEndHour: dayEndHour,
           isToday: isToday,
           onTap: onTap,
+          onLongPressAt: onLongPressAt,
         ),
         if (schedule.overflow.isNotEmpty || schedule.unplanned.isNotEmpty) ...[
           const SizedBox(height: 24),

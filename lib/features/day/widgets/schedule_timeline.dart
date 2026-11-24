@@ -205,9 +205,17 @@ class ScheduleTimeline extends StatefulWidget {
     required this.dayEndHour,
     required this.isToday,
     required this.onTap,
+    this.onLongPressAt,
   });
 
   final List<ScheduledTask> entries;
+
+  /// Holding down on empty timeline: the time there in minutes from
+  /// midnight, rounded down to [longPressStepMinutes]. Blocks don't
+  /// pass it on.
+  final ValueChanged<int>? onLongPressAt;
+
+  static const longPressStepMinutes = 15;
 
   /// The Now card's item (that block is outlined).
   final ScheduledTask? current;
@@ -286,6 +294,25 @@ class _ScheduleTimelineState extends State<ScheduleTimeline> {
           child: Stack(
             clipBehavior: Clip.none,
             children: [
+              // Underneath everything, so only empty timeline takes it.
+              if (widget.onLongPressAt != null)
+                Positioned.fill(
+                  left: gutter,
+                  child: GestureDetector(
+                    key: const ValueKey('timeline-empty'),
+                    behavior: HitTestBehavior.opaque,
+                    onLongPressStart: (d) {
+                      const step = ScheduleTimeline.longPressStepMinutes;
+                      final minutes =
+                          layout.startMinutes + d.localPosition.dy ~/ ppm;
+                      final snapped = (minutes ~/ step * step).clamp(
+                        layout.startMinutes,
+                        layout.endMinutes - step,
+                      );
+                      widget.onLongPressAt!(snapped);
+                    },
+                  ),
+                ),
               for (
                 var m = layout.startMinutes;
                 m <= layout.endMinutes;
@@ -295,7 +322,10 @@ class _ScheduleTimelineState extends State<ScheduleTimeline> {
                   left: gutter,
                   right: 0,
                   top: y(m),
-                  child: Container(height: 1, color: colors.hairline),
+                  // Lets a long press through to the timeline below.
+                  child: IgnorePointer(
+                    child: Container(height: 1, color: colors.hairline),
+                  ),
                 ),
                 Positioned(
                   left: 0,
@@ -317,17 +347,19 @@ class _ScheduleTimelineState extends State<ScheduleTimeline> {
                     right: 0,
                     top: y(gap.startMinutes),
                     height: gap.minutes * ppm,
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      // Background masks an hour line running through it.
-                      child: ColoredBox(
-                        color: colors.background,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          child: Text(
-                            '${AppUtils.formatDuration(gap.minutes)} free',
-                            style: text.bodySmall?.copyWith(
-                              color: colors.textMuted,
+                    child: IgnorePointer(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        // Background masks an hour line running through it.
+                        child: ColoredBox(
+                          color: colors.background,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            child: Text(
+                              '${AppUtils.formatDuration(gap.minutes)} free',
+                              style: text.bodySmall?.copyWith(
+                                color: colors.textMuted,
+                              ),
                             ),
                           ),
                         ),

@@ -23,9 +23,11 @@ class _CaptureBarState extends State<CaptureBar> {
   final _focus = FocusNode();
 
   /// (label, token appended to the text) — tokens the capture parser
-  /// reads; [_pickTime] opens a time picker.
+  /// reads; [_pickTime] opens a time picker; [_asMeeting] starts the text
+  /// with "Meeting" and asks for a time.
   static const _shorthand = [
     ('★ Outcome', '*'),
+    ('Meeting', _asMeeting),
     ('30m', '30m'),
     ('1h', '1h'),
     ('at …', _pickTime),
@@ -40,6 +42,24 @@ class _CaptureBarState extends State<CaptureBar> {
 
   /// Stands in for a token: the chip opens a time picker instead.
   static const _pickTime = '';
+
+  /// Stands in for a token: the chip makes the text a Meeting instead.
+  static const _asMeeting = ' meeting';
+
+  /// Starts the text with "Meeting" (unless it already does), which the
+  /// capture parser reads as a Meeting once a time is added, then asks
+  /// for that time.
+  Future<void> _makeMeeting() async {
+    final current = _controller.text.trim();
+    if (!current.toLowerCase().startsWith('meeting')) {
+      final next = current.isEmpty ? 'Meeting ' : 'Meeting - $current';
+      _controller.value = TextEditingValue(
+        text: next,
+        selection: TextSelection.collapsed(offset: next.length),
+      );
+    }
+    await _appendPickedTime();
+  }
 
   /// Asks for a time (starting at the next half hour) and appends it as
   /// "at 3pm" / "at 3:30pm", which the capture parser reads.
@@ -122,9 +142,11 @@ class _CaptureBarState extends State<CaptureBar> {
                           backgroundColor: colors.surface,
                           side: BorderSide(color: colors.hairline),
                           visualDensity: VisualDensity.compact,
-                          onPressed: () => token == _pickTime
-                              ? _appendPickedTime()
-                              : _append(token),
+                          onPressed: () => switch (token) {
+                            _pickTime => _appendPickedTime(),
+                            _asMeeting => _makeMeeting(),
+                            _ => _append(token),
+                          },
                         ),
                       ),
                   ],

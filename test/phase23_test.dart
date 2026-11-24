@@ -99,7 +99,11 @@ void main() {
       }
       final parts = _sessions(s, report);
       expect(parts.fold<int>(0, (m, p) => m + p.durationMinutes), 120);
-      expect(_sessions(s, contract).single.durationMinutes, 60);
+      // Outcomes take the earliest free time, split if need be.
+      expect(
+        _sessions(s, contract).fold<int>(0, (m, p) => m + p.durationMinutes),
+        60,
+      );
     });
 
     test('short work (30m or less) is never split', () {
@@ -144,7 +148,7 @@ void main() {
       expect(_sessions(s, reply).single.startMinutes, 11 * 60);
     });
 
-    test('split work: first session early, the rest in the longest gaps', () {
+    test('split Outcome: the earliest free time, gaps in order', () {
       // Gaps: 8:00–8:30, 9:00–9:45, 10:00–12:00.
       final o = _work('Deck', 150, outcome: true);
       final s = Scheduler.schedule(
@@ -153,9 +157,12 @@ void main() {
         dayEndHour: 12,
       );
       final parts = _sessions(s, o);
-      expect([for (final p in parts) p.startMinutes], [8 * 60, 10 * 60]);
-      expect([for (final p in parts) p.durationMinutes], [30, 120]);
-      expect(parts.first.parts, 2);
+      expect(
+        [for (final p in parts) p.startMinutes],
+        [8 * 60, 9 * 60, 10 * 60],
+      );
+      expect([for (final p in parts) p.durationMinutes], [30, 45, 75]);
+      expect(parts.first.parts, 3);
     });
 
     test('"Do next" takes the earliest free time, even a small gap', () {
@@ -170,11 +177,7 @@ void main() {
       // 60m free: 8:00–9:00.
       final o = _work('Deck', 100, outcome: true);
       final chore = _work('Chore', 15);
-      final s = Scheduler.schedule(
-        [o, chore],
-        dayStartHour: 8,
-        dayEndHour: 9,
-      );
+      final s = Scheduler.schedule([o, chore], dayStartHour: 8, dayEndHour: 9);
       expect(_sessions(s, o).single.durationMinutes, 60);
       expect(s.unplanned[o.id], 40);
       expect(s.overflow, [chore]);
